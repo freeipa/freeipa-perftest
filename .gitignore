@@ -1,0 +1,8 @@
+Vagrantfile
+hosts
+fetch_logs.yml
+ansible.cfg
+sync
+ansible-freeipa
+.vagrant
+vagrant-ssh-config
