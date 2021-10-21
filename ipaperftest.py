@@ -180,7 +180,10 @@ class EnrollmentTest:
             .strip()
         )
         try:
-            if int(host_find_output) == self.clients_succeeded + 1:
+            if (
+                int(host_find_output) == self.clients_succeeded + 1
+                and len(self.hosts.keys()) == self.clients_succeeded + 1
+            ):
                 print("All clients enrolled succesfully.")
             else:
                 print(
@@ -475,6 +478,13 @@ def main(
         "ansible -i hosts all -m ping --ssh-extra-args '-F vagrant-ssh-config'",
         shell=True,
     )
+
+    if len(hosts.keys()) != amount + 1:
+        print(
+            "WARNING: number of hosts provisioned ({}) does not match requested amount.".format(
+                len(hosts.keys())
+            )
+        )
 
     # Initial server config
     server_cmds = [
