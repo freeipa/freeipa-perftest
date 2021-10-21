@@ -362,7 +362,7 @@ def main(
         hostname="server." + domain.lower(),
         memory_size=8192,
         cpus_number=4,
-        extra_commands="dnf install sysstat -y",
+        extra_commands="yum install sysstat -y",
         ip=next(ip_generator),
     )
 
