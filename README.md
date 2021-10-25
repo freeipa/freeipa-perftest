@@ -33,3 +33,37 @@ The controller must have the following software installed:
 ## Capturing results
 
 After executing the script, a `sync` directory will be created. There you will find logs gathered from all the machines deployed, including performance monitoring using SAR.
+
+## Creating test users
+
+For client authentication test we need a lot of users to test against.
+The combination of two scripts will create the users needed for testing
+with identical, unexpired passwords.
+
+In order to set passwords using a pre-hashed password IPA needs to
+be in migration mode:
+
+```
+$ kinit admin
+$ ipa config-mod --enable-migration=true
+```
+
+Create 10 users for each of 500 hosts. The format of the uid is
+user#client@.<domain>.
+
+```
+$ ./create-test-data.py  > user.ldif
+$ ldapadd -x -D 'cn=directory manager' -W < user.ldif
+```
+
+Time to add depends on the server but for me it was ~9 minutes.
+
+Now reset all Kerberos credentials to the value of 'password':
+
+```
+./set-password.py --dm-password <Directory Manager password>
+```
+
+Time to reset the passwords is ~11 minutes. This is done as the
+DM user requesting a keytab for each user which will set the
+Kerberos credentails. The LDAP password is set on the import.
