@@ -22,6 +22,7 @@ The controller must have the following software installed:
   * `EnrollmentTest`: Try to enroll n clients simultaneously. This is the default.
   * `APITest`: Try to run IPA command n times simultaneously.
 * `amount`: Size of the test. For example, in the case of `EnrollmentTest`, it will create this amount of clients. 
+* `replicas`: Number of replicas to deploy. Currently limited to 2.
 * `command`: Command to run. Only relevant when using `APITest`. Use `{id}` for getting an unique ID into the command. Example: `ipa user-add user{id}`.
 * `client-image`: Vagrant image to use for the clients. Default: `antorres/fedora-34-ipa-client`. If you use a different image, make sure it has all the needed packages installed:
     * `freeipa-client`
