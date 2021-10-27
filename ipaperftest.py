@@ -50,6 +50,19 @@ ipaserver_domain={domain}
 ipaserver_realm={realm}
 ipaserver_setup_dns=yes
 ipaserver_no_forwarders=yes
+ipaserver_auto_reverse=yes
+
+[ipareplicas]
+{replica_hostnames}
+
+[ipareplicas:vars]
+ipaadmin_password=password
+ipadm_password=password
+ipareplica_domain={domain}
+ipaserver_realm={realm}
+ipareplica_setup_dns=yes
+ipareplica_no_forwarders=yes
+ipareplica_auto_reverse=yes
 
 [ipaclients]
 {client_hostnames}
@@ -126,8 +139,10 @@ class EnrollmentTest:
         ]
 
         processes = {}
+        non_client_hosts = 0
         for host in self.hosts.keys():
-            if host == "server":
+            if host == "server" or host.startswith("replica"):
+                non_client_hosts += 1
                 continue
             proc = sp.Popen(
                 'vagrant ssh {host} -c "{cmd}"'.format(
@@ -181,8 +196,8 @@ class EnrollmentTest:
         )
         try:
             if (
-                int(host_find_output) == self.clients_succeeded + 1
-                and len(self.hosts.keys()) == self.clients_succeeded + 1
+                int(host_find_output) == self.clients_succeeded + non_client_hosts
+                and len(self.hosts.keys()) == self.clients_succeeded + non_client_hosts
             ):
                 print("All clients enrolled succesfully.")
             else:
@@ -322,6 +337,12 @@ class APITest:
     help="Vagrant image to use for server.",
 )
 @click.option("--amount", default=1, help="Size of the test.")
+@click.option(
+    "--replicas",
+    default=0,
+    type=click.IntRange(0, 2),
+    help="Number of replicas to create.",
+)
 @click.option("--command", help="Command to execute during APITest.")
 @click.option(
     "--private-key",
@@ -334,6 +355,7 @@ def main(
     client_image="antorres/fedora-34-ipa-client",
     server_image="antorres/fedora-34-ipa-client",
     amount=1,
+    replicas=0,
 ):
 
     # Destroy previous VMs
@@ -359,31 +381,49 @@ def main(
     ip_generator = generate_ip()
 
     # Generate Vagrantfile
-    machine_configs = MACHINE_CONFIG_TEMPLATE.format(
-        machine_name="server",
-        box=server_image,
-        hostname="server." + domain.lower(),
-        memory_size=8192,
-        cpus_number=4,
-        extra_commands="yum install sysstat -y",
-        ip=next(ip_generator),
-    )
+    machine_configs = [
+        MACHINE_CONFIG_TEMPLATE.format(
+            machine_name="server",
+            box=server_image,
+            hostname="server." + domain.lower(),
+            memory_size=8192,
+            cpus_number=4,
+            extra_commands="yum install sysstat -y",
+            ip=next(ip_generator),
+        )
+    ]
+
+    # Add replicas to Vagrantfile
+    for i in range(replicas):
+        name = "replica{}".format(str(i))
+        machine_configs.append(
+            MACHINE_CONFIG_TEMPLATE.format(
+                machine_name=name,
+                box=server_image,
+                hostname=name + "." + domain.lower(),
+                memory_size=8192,
+                cpus_number=4,
+                extra_commands="yum install sysstat -y",
+                ip=next(ip_generator),
+            )
+        )
 
     if test == "EnrollmentTest":
         # Enrollment test needs client machines
         for i in range(amount):
             idx = str(i).zfill(3)
             machine_name = "client{}".format(idx)
-            config = MACHINE_CONFIG_TEMPLATE.format(
-                machine_name=machine_name,
-                box=client_image,
-                hostname=machine_name + "." + domain.lower(),
-                memory_size=384,
-                cpus_number=1,
-                extra_commands="",
-                ip=next(ip_generator),
+            machine_configs.append(
+                MACHINE_CONFIG_TEMPLATE.format(
+                    machine_name=machine_name,
+                    box=client_image,
+                    hostname=machine_name + "." + domain.lower(),
+                    memory_size=384,
+                    cpus_number=1,
+                    extra_commands="",
+                    ip=next(ip_generator),
+                )
             )
-            machine_configs += config
     elif test == "APITest":
         if not command:
             print("Please specify a command to run using the --command option.")
@@ -392,14 +432,16 @@ def main(
         n_clients = math.ceil(amount / 50)
         for i in range(n_clients):
             machine_name = "client{}".format(str(i).zfill(3))
-            machine_configs += MACHINE_CONFIG_TEMPLATE.format(
-                machine_name=machine_name,
-                box=client_image,
-                hostname=machine_name + "." + domain.lower(),
-                memory_size=4098,
-                cpus_number=2,
-                extra_commands="",
-                ip=next(ip_generator),
+            machine_configs.append(
+                MACHINE_CONFIG_TEMPLATE.format(
+                    machine_name=machine_name,
+                    box=client_image,
+                    hostname=machine_name + "." + domain.lower(),
+                    memory_size=4098,
+                    cpus_number=2,
+                    extra_commands="",
+                    ip=next(ip_generator),
+                )
             )
     else:
         print("Selected test '%s' couldn't be found." % test)
@@ -415,7 +457,7 @@ def main(
     )
     file_contents = VAGRANTFILE_TEMPLATE.format(
         vagrant_additional_config=vagrant_additional_config,
-        machine_configs=machine_configs,
+        machine_configs="\n".join(machine_configs),
     )
     with open("Vagrantfile", "w") as f:
         f.write(file_contents)
@@ -458,13 +500,25 @@ def main(
         pair = line.replace("\n", "").replace("Host ", "").split("  HostName ")
         hosts[pair[0]] = pair[1]
 
+    # Each replica should have main server + all the other replicas as servers
+    replica_lines = []
+    for name, _ in hosts.items():
+        if name.startswith("client") or name.startswith("server"):
+            continue
+        servers = ["server." + domain]
+        for other, _ in hosts.items():
+            if other.startswith("replica") and other != name:
+                servers.append(other + "." + domain)
+        replica_lines.append(name + " ipareplica_servers={}".format(",".join(servers)))
+
     # Generate ansible inventory file
     inventory_str = HOSTS_FILE_TEMPLATE.format(
         domain=domain.lower(),
         realm=domain.upper(),
         client_hostnames="\n".join(
-            [name for name, ip in hosts.items() if name.startswith("client")]
+            [name for name, _ in hosts.items() if name.startswith("client")]
         ),
+        replica_hostnames="\n".join(replica_lines),
     )
     with open("hosts", "w") as f:
         f.write(inventory_str)
@@ -479,10 +533,10 @@ def main(
         shell=True,
     )
 
-    if len(hosts.keys()) != amount + 1:
+    if len(hosts.keys()) != len(machine_configs):
         print(
-            "WARNING: number of hosts provisioned ({}) does not match requested amount.".format(
-                len(hosts.keys())
+            "WARNING: number of hosts provisioned ({}) does not match requested amount ({}).".format(
+                len(hosts.keys()), len(machine_configs)
             )
         )
 
@@ -501,13 +555,40 @@ def main(
         stderr=sp.PIPE,
     )
 
+    # Replica config
+    replica_cmds = [
+        "{{ echo '{} server.{} server' | sudo tee -a /etc/hosts; }}".format(
+            hosts["server"], domain
+        ),
+        "sudo rm -f /etc/resolv.conf",
+        "{{ echo 'nameserver {server}' | sudo tee -a /etc/resolv.conf; }}".format(
+            server=hosts["server"]
+        ),
+        "sudo sed -i '/127.*.*.*\s*replica*/d' /etc/hosts",
+    ]
+
+    for host, ip in hosts.items():
+        if host.startswith("replica"):
+            sp.run(
+                'vagrant ssh {} -c "{}"'.format(host, " && ".join(replica_cmds)),
+                shell=True,
+                stdout=sp.PIPE,
+                stderr=sp.PIPE,
+            )
+
     # Install ipaserver
     print("Installing IPA server...")
     sp.run(
         "ansible-playbook -v -i hosts ansible-freeipa/playbooks/install-server.yml --ssh-extra-args '-F vagrant-ssh-config'",
         shell=True,
-        stdout=sp.PIPE,
     )
+
+    # Install replicas
+    if replicas > 0:
+        sp.run(
+            "ansible-playbook -v -i hosts ansible-freeipa/playbooks/install-replica.yml --ssh-extra-args '-F vagrant-ssh-config'",
+            shell=True,
+        )
 
     # Start SAR on server
     print("Starting monitoring on server using SAR...")
