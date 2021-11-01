@@ -135,7 +135,8 @@ class EnrollmentTest:
                 server=self.hosts["server"]
             ),
             "sleep $(( {} - $(date +%s) ))".format(str(client_install_time)),
-            "sudo ipa-client-install -p admin -w password -U --enable-dns-updates --no-nisdomain -N",
+            "sudo ipa-client-install -p admin -w password -U "
+            "--enable-dns-updates --no-nisdomain -N",
         ]
 
         processes = {}
@@ -202,7 +203,8 @@ class EnrollmentTest:
                 print("All clients enrolled succesfully.")
             else:
                 print(
-                    "ERROR: client installs succeeded number does not match host-find output. Check for failures during installation."
+                    "ERROR: client installs succeeded number does not match "
+                    "host-find output. Check for failures during installation."
                 )
                 print("Hosts found in host-find: %s" % str(host_find_output))
                 print(
@@ -230,7 +232,8 @@ class APITest:
             "{{ echo 'nameserver {server}' | sudo tee -a /etc/resolv.conf; }}".format(
                 server=self.hosts["server"]
             ),
-            "sudo ipa-client-install -p admin -w password -U --enable-dns-updates --no-nisdomain -N",
+            "sudo ipa-client-install -p admin -w password -U "
+            "--enable-dns-updates --no-nisdomain -N",
             "{ echo password | kinit admin; }",
         ]
         for client in clients:
@@ -258,8 +261,11 @@ class APITest:
         for i in range(self.amount):
             client_idx = math.floor(i / 50)
             formated_api_cmd = self.base_cmd.format(id=str(i))
-            cmd = "echo 'echo {cmd} > ~/command{id}log; {cmd} >> ~/command{id}log 2>&1; echo \$? >> ~/command{id}log' | at {time}".format(
-                cmd=formated_api_cmd, id=str(i), time=local_run_time
+            cmd = (
+                r"echo 'echo {cmd} > ~/command{id}log; {cmd} >> "
+                r"~/command{id}log 2>&1; echo \$? >> ~/command{id}log' "
+                r"| at {time}".format(
+                 cmd=formated_api_cmd, id=str(i), time=local_run_time)
             )
             sp.run(
                 'vagrant ssh {} -c "{}"'.format(clients[client_idx], cmd),
@@ -270,7 +276,8 @@ class APITest:
             )
 
         print("Commands will be run at %s (machine local time)" % local_run_time)
-        # Wait until all atd commands have completed (that is, once /var/spool/at only has the 'spool' dir)
+        # Wait until all atd commands have completed
+        # (that is, once /var/spool/at only has the 'spool' dir)
         while True:
             clients_cmds_pending = []
             for client in clients:
@@ -535,7 +542,8 @@ def main(
 
     if len(hosts.keys()) != len(machine_configs):
         print(
-            "WARNING: number of hosts provisioned ({}) does not match requested amount ({}).".format(
+            "WARNING: number of hosts provisioned ({}) does not match"
+            "requested amount ({}).".format(
                 len(hosts.keys()), len(machine_configs)
             )
         )
@@ -544,7 +552,7 @@ def main(
     server_cmds = [
         "sudo sed -i 's/disable_ipv6 = 1/disable_ipv6 = 0/' /etc/sysctl.conf",
         "sudo sysctl -p",
-        "sudo sed -i 's/127.*.*.*\s*server/{} server.{} server/' /etc/hosts".format(
+        r"sudo sed -i 's/127.*.*.*\s*server/{} server.{} server/' /etc/hosts".format(
             hosts["server"], domain
         ),
     ]
@@ -564,7 +572,7 @@ def main(
         "{{ echo 'nameserver {server}' | sudo tee -a /etc/resolv.conf; }}".format(
             server=hosts["server"]
         ),
-        "sudo sed -i '/127.*.*.*\s*replica*/d' /etc/hosts",
+        r"sudo sed -i '/127.*.*.*\s*replica*/d' /etc/hosts",
     ]
 
     for host, ip in hosts.items():
@@ -579,14 +587,18 @@ def main(
     # Install ipaserver
     print("Installing IPA server...")
     sp.run(
-        "ansible-playbook -v -i hosts ansible-freeipa/playbooks/install-server.yml --ssh-extra-args '-F vagrant-ssh-config'",
+        "ansible-playbook -v -i hosts "
+        "ansible-freeipa/playbooks/install-server.yml "
+        "--ssh-extra-args '-F vagrant-ssh-config'",
         shell=True,
     )
 
     # Install replicas
     if replicas > 0:
         sp.run(
-            "ansible-playbook -v -i hosts ansible-freeipa/playbooks/install-replica.yml --ssh-extra-args '-F vagrant-ssh-config'",
+            "ansible-playbook -v -i hosts "
+            "ansible-freeipa/playbooks/install-replica.yml "
+            "--ssh-extra-args '-F vagrant-ssh-config'",
             shell=True,
         )
 
