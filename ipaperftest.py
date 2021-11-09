@@ -49,7 +49,7 @@ ipadm_password=password
 ipaserver_domain={domain}
 ipaserver_realm={realm}
 ipaserver_setup_dns=yes
-ipaserver_no_forwarders=yes
+ipaserver_auto_forwarders=yes
 ipaserver_auto_reverse=yes
 
 [ipareplicas]
@@ -61,7 +61,7 @@ ipadm_password=password
 ipareplica_domain={domain}
 ipaserver_realm={realm}
 ipareplica_setup_dns=yes
-ipareplica_no_forwarders=yes
+ipareplica_auto_forwarders=yes
 ipareplica_auto_reverse=yes
 
 [ipaclients]
@@ -542,7 +542,7 @@ def main(
 
     if len(hosts.keys()) != len(machine_configs):
         print(
-            "WARNING: number of hosts provisioned ({}) does not match"
+            "WARNING: number of hosts provisioned ({}) does not match "
             "requested amount ({}).".format(
                 len(hosts.keys()), len(machine_configs)
             )
@@ -564,19 +564,21 @@ def main(
     )
 
     # Replica config
-    replica_cmds = [
-        "{{ echo '{} server.{} server' | sudo tee -a /etc/hosts; }}".format(
-            hosts["server"], domain
-        ),
-        "sudo rm -f /etc/resolv.conf",
-        "{{ echo 'nameserver {server}' | sudo tee -a /etc/resolv.conf; }}".format(
-            server=hosts["server"]
-        ),
-        r"sudo sed -i '/127.*.*.*\s*replica*/d' /etc/hosts",
-    ]
-
     for host, ip in hosts.items():
         if host.startswith("replica"):
+            replica_cmds = [
+                "{{ echo '{} server.{} server' | sudo tee -a /etc/hosts; }}".format(
+                    hosts["server"], domain
+                ),
+                "sudo rm -f /etc/resolv.conf",
+                "{{ echo 'nameserver {server}' | sudo tee -a /etc/resolv.conf; }}".format(
+                    server=hosts["server"]
+                ),
+                r"sudo sed -i '/127.*.*.*\s*replica*/d' /etc/hosts",
+                "{{ echo '{} {} {}' | sudo tee -a /etc/hosts; }}".format(
+                    ip, host + "." + domain, host
+                )
+            ]
             sp.run(
                 'vagrant ssh {} -c "{}"'.format(host, " && ".join(replica_cmds)),
                 shell=True,
