@@ -9,3 +9,4 @@ vagrant-ssh-config
 *.pyc
 *.egg-info
 /venv
+src/thread
