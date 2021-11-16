@@ -84,7 +84,7 @@ module_utils = {cwd}/ansible-freeipa/plugins/module_utils
 ANSIBLE_FETCH_FILES_PLAYBOOK = """
 ---
 - name: Fetch IPA server log files
-  hosts: ipaserver
+  hosts: ipaserver, ipareplicas
   become: true
   tasks:
     - synchronize:
