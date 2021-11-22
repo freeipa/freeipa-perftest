@@ -4,6 +4,7 @@
 
 import subprocess as sp
 import time
+import os
 
 from ipaperftest.core.main import Plugin
 from ipaperftest.core.constants import MACHINE_CONFIG_TEMPLATE
@@ -121,3 +122,33 @@ class EnrollmentTest(Plugin):
             )
 
         return
+
+    def post_process_logs(self, ctx):
+        """ Calculate enrollment distribution between servers """
+        if ctx.params['replicas'] <= 0:
+            return
+
+        server_count = dict()
+        n_clients = 0
+        for f in os.listdir("sync"):
+            if f.startswith("client"):
+                n_clients += 1
+                logpath = "sync/{}/ipaclient-install.log".format(f)
+                try:
+                    logstr = open(logpath).readlines()
+                except FileNotFoundError:
+                    print("File {} not found.".format(logpath))
+                    continue
+                for line in logstr:
+                    if "discovered server" in line:
+                        hostname = line.strip().split(" ")[-1]
+                        if hostname in server_count:
+                            server_count[hostname] += 1
+                        else:
+                            server_count[hostname] = 1
+                        break
+
+        for server, enrollments in server_count.items():
+            percentage = round((enrollments / n_clients) * 100)
+            print("Server {} managed {} out of {} enrollments ({}%)".format(
+                server, enrollments, n_clients, percentage))
