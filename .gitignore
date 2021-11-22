@@ -6,3 +6,6 @@ sync
 ansible-freeipa
 .vagrant
 vagrant-ssh-config
+*.pyc
+*.egg-info
+/venv
