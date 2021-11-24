@@ -13,11 +13,15 @@
 #include <krb5.h>
 #include <popt.h>
 #include <sys/utsname.h>
+#include <errno.h>
+#include <string.h>
 
 /* The only global, the name of the PAM service */
 char * pam_service = NULL;
 
-void *call_pam(void *ptr);
+int *call_pam(void *ptr);
+
+FILE *fp = NULL;
 
 /*
  * Always return the fixed password string "password"
@@ -30,10 +34,10 @@ int conv_static_password(int num_msg, const struct pam_message **msgm,
     reply = (struct pam_response *) calloc(num_msg,
 					   sizeof(struct pam_response));
     if (reply == NULL) {
-	    fprintf(stderr, "no memory for responses");
-    	return PAM_CONV_ERR;
+        fprintf(fp, "no memory for responses");
+        return PAM_CONV_ERR;
     }
-	char *string=NULL;
+    char *string=NULL;
 
     string = strdup("password\0");
     reply[0].resp_retcode = 0;
@@ -45,20 +49,20 @@ int conv_static_password(int num_msg, const struct pam_message **msgm,
 
 static struct pam_conv conv = { conv_static_password, NULL };
 
-void *call_pam(void *username)
+int *call_pam(void *username)
 {
     pam_handle_t *pamh;
     int result;
 
-    fprintf(stderr, "authenticating %s:%s\n", pam_service, (char *)username);
+    fprintf(fp, "authenticating %s:%s\n", pam_service, (char *)username);
     if ((result = pam_start(pam_service, username, &conv, &pamh)) != PAM_SUCCESS) {
-        fprintf(stderr, "start for %s failed: %d\n", (char *)username, result);
+        fprintf(fp, "start for %s failed: %s (%d)\n", (char *)username, pam_strerror(pamh, result), result);
     } else if ((result = pam_authenticate(pamh, 0)) != PAM_SUCCESS) {
-        fprintf(stderr, "authenticate for %s failed: %d\n", (char *)username, result);
+        fprintf(fp, "authenticate for %s failed: %s (%d)\n", (char *)username, pam_strerror(pamh, result), result);
     } else if ((result = pam_acct_mgmt(pamh, 0)) != PAM_SUCCESS) {
-        fprintf(stderr, "acct_mgmt for %s failed: %d\n", (char *)username, result);
+        fprintf(fp, "acct_mgmt for %s failed: %s (%d)\n", (char *)username, pam_strerror(pamh, result), result);
     } else { 
-        fprintf(stderr, "authenticated %s\n", (char *)username);
+        fprintf(fp, "authenticated %s\n", (char *)username);
 
         if (geteuid() == 0) {
             /* When run as root we can verify that a ticket was obtained */
@@ -70,28 +74,32 @@ void *call_pam(void *username)
 
             ccache_txt = pam_getenv(pamh, "KRB5CCNAME");
             setenv("KRB5CCNAME", ccache_txt, 1);
-            fprintf(stderr, "%s\n", ccache_txt);
+            fprintf(fp, "%s\n", ccache_txt);
             krb5_init_context(&krbctx);
             krb5_cc_default(krbctx, &ccache);
             krb5_cc_get_principal(krbctx, ccache, &uprinc);
             krb5_unparse_name(krbctx, uprinc, &outname);
-            fprintf(stderr, "principal %s\n", outname);
+            fprintf(fp, "principal %s\n", outname);
         }
     }
 
-    if ((result = pam_open_session(pamh, 0)) != PAM_SUCCESS) {
-        fprintf(stderr, "open session for %s failed: %d\n", (char *)username, result);
+    if (pam_open_session(pamh, 0) != PAM_SUCCESS) {
+        fprintf(fp, "open session for %s failed: %s (%d)\n", (char *)username, pam_strerror(pamh, result), result);
     } else {
         pam_close_session(pamh, 0);
     }
-    if ((result = pam_end(pamh, result)) != PAM_SUCCESS) {
-        fprintf(stderr, "end failed: %d\n", result);
+    if (pam_end(pamh, result) != PAM_SUCCESS) {
+        fprintf(fp, "end failed:  %s (%d)\n", pam_strerror(pamh, result), result);
     }
+
+    fprintf(fp, "Thread returned %i\n", result);
+    return result;
 }
 
 int main(int argc, const char **argv)
 {
     char *service = NULL;
+    char *logfile = NULL;
     int threads = -1;
     pthread_t *ptr = NULL;
     int *index = NULL;
@@ -101,6 +109,7 @@ int main(int argc, const char **argv)
     struct utsname uinfo;
     poptContext pctx;
     struct poptOption popts[] = {
+        {"outfile", 'o', POPT_ARG_STRING, NULL, 'o', NULL, "FILE"},
         {"service", 's', POPT_ARG_STRING, NULL, 's', NULL, "SERVICE"},
         {"threads", 't', POPT_ARG_INT, &threads, 0, NULL, NULL},
         POPT_AUTOHELP
@@ -113,8 +122,12 @@ int main(int argc, const char **argv)
     }
     while ((c = poptGetNextOpt(pctx)) > 0) {
         switch (c) {
+        case 'o':
+            logfile = poptGetOptArg(pctx);
+            break;
         case 's':
             service = poptGetOptArg(pctx);
+            break;
         }
     }
     if (c != -1) {
@@ -132,8 +145,19 @@ int main(int argc, const char **argv)
 
     if (service == NULL) {
         pam_service = strdup("login");
-	} else {
+    } else {
         pam_service = service;
+    }
+
+    if (logfile == NULL) {
+        fp = stdout;
+    } else {
+        fp = fopen(logfile, "w");
+        if (fp == NULL) {
+            printf("Unable to open %s: %s\n", logfile, strerror(errno));
+            ret = 1;
+            goto done;
+        }
     }
 
     uname(&uinfo);
@@ -148,6 +172,7 @@ int main(int argc, const char **argv)
         ret = 1;
         goto done;
     }
+
     usernames = calloc(threads, 256);
     if (usernames == NULL) {
         ret = 1;
@@ -172,7 +197,11 @@ int main(int argc, const char **argv)
     free(ptr);
 
 done:
+    if (fp != NULL) {
+        fclose(fp);
+    }
     poptFreeContext(pctx);
     free(pam_service);
+    free(logfile);
     return ret;
 }
