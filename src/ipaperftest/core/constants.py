@@ -106,5 +106,6 @@ ANSIBLE_FETCH_FILES_PLAYBOOK = """
         use_ssh_args: yes
       with_items:
         - "/var/log/ipaclient-install.log"
+{custom_logs}
 
 """
