@@ -67,6 +67,7 @@ class Plugin:
         self.ip_generator = self.generate_ip()
         self.machine_configs = []
         self.hosts = dict()
+        self.custom_logs = []
 
     # IPs will be like 192.168.x.y
     def generate_ip(self):
@@ -309,6 +310,10 @@ class Plugin:
         )
 
     def collect_logs(self, ctx):
+        def add_logs(logs):
+            for log in logs:
+                yield '        - "{}"'.format(log)
+
         # Wait for sar to analyze system
         print("Waiting before copying logs...")
         time.sleep(60)
@@ -317,9 +322,14 @@ class Plugin:
         for host in self.hosts.keys():
             sp.run(["mkdir", "-p", f"sync/{host}"], stdout=sp.PIPE)
 
+        logstr = '\n'.join(add_logs(self.custom_logs))
+
         with open("fetch_logs.yml", "w") as ansible_fetch_file:
             ansible_fetch_file.write(
-                ANSIBLE_FETCH_FILES_PLAYBOOK.format(cwd=os.getcwd())
+                ANSIBLE_FETCH_FILES_PLAYBOOK.format(
+                    cwd=os.getcwd(),
+                    custom_logs=logstr,
+                )
             )
         sp.run(
             "ansible-playbook -v -i hosts fetch_logs.yml --ssh-extra-args '-F vagrant-ssh-config'",

@@ -17,17 +17,18 @@ from ipapython.ipautil import run
               type=int)
 @click.option("--hosts", default=500, help="Number of hosts.",
               type=int)
+@click.option("--host-prefix", default="client", help="hostname prefix")
 @click.option("--dm-password", default=None, required=True,
               help="Directory manager password.")
 @click.option("--debug", default=False, help="Debug logging", is_flag=True)
-def main(users_per_host, hosts, dm_password, debug):
+def main(users_per_host, hosts, host_prefix, dm_password, debug):
     api.bootstrap(in_server=True, context='server', in_tree=False,
                   debug=debug)
     api.finalize()
 
     keytab = '/tmp/kt'
     for i in range(0, hosts):
-        hostname = 'client{}.{}'.format(i, api.env.domain)
+        hostname = '{}{:03d}.{}'.format(host_prefix, i, api.env.domain)
         for i in range(0, users_per_host):
             uid = 'user{}{}'.format(i, hostname)
             principal = '{}@{}'.format(uid, api.env.realm)

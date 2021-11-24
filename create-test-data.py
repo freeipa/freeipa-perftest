@@ -14,10 +14,10 @@ from ipalib import api
 class IPAData(object):
     def __init__(
             self, domain, basedn, realm,
-            stream=sys.stdout,
             users=50000,
             hosts=40000,
             host_prefix="client",
+            outfile=None,
     ):
 
         # TBD: compute everything else based on users and groups
@@ -68,7 +68,11 @@ class IPAData(object):
         self.domain = domain
         self.basedn = basedn
         self.realm = realm
-        self.stream = stream
+
+        if outfile:
+            self.stream = open(outfile, "w")
+        else:
+            self.stream = sys.stdout
 
         self.users = users
         self.groups = groups
@@ -645,6 +649,7 @@ class IPAData(object):
         self.gen_hosts_and_hostgroups()
         self.generate_sudorules()
         self.generate_hbac()
+        self.stream.close()
 
 
 class IPADataLDIF(IPAData):
@@ -670,7 +675,7 @@ class IPATestDataLDIF(IPADataLDIF):
 
     def hostname_generator(self, start, stop, step=1):
         for i in range(start, stop, step):
-            yield '{}{}.{}'.format(
+            yield '{}{:03d}.{}'.format(
                 self.host_prefix, i, self.domain
             )
 
@@ -698,6 +703,7 @@ class IPATestDataLDIF(IPADataLDIF):
 @click.option("--hosts", default=500, help="Number of hosts to create.",
               type=int)
 @click.option("--host-prefix", default="client", help="hostname prefix")
+@click.option("--outfile", default=None, help="LDIF output file")
 @click.option("--with-groups", default=False, help="Create user groups.",
               is_flag=True)
 @click.option("--with-hostgroups", default=False, help="Create host groups.",
@@ -716,6 +722,7 @@ def main(
     with_sudo,
     with_hbac,
     debug,
+    outfile,
 ):
     api.bootstrap(in_server=True, context='server', in_tree=False, debug=debug)
     api.finalize()
@@ -725,7 +732,8 @@ def main(
         api.env.realm,
         users=users_per_host,
         hosts=hosts,
-        host_prefix=host_prefix
+        host_prefix=host_prefix,
+        outfile=outfile,
     )
     data.do_magic()
 

@@ -20,8 +20,9 @@ setup(
         ],
         # plugin modules for ipaperftest.plugins registry
         'ipaperftest.plugins': [
-            'enrollmenttest = ipaperftest.plugins.enrollmenttest',
             'apitest = ipaperftest.plugins.apitest',
+            'authenticationtest = ipaperftest.plugins.authenticationtest',
+            'enrollmenttest = ipaperftest.plugins.enrollmenttest',
         ],
     },
     install_requires=[
