@@ -16,7 +16,7 @@ The controller must have the following software installed:
 
 ## Usage
 
-`./ipaperftest.py [OPTIONS]`
+`ipaperftest [OPTIONS]`
 
 * `test`: Test to perform. Current options are:
   * `EnrollmentTest`: Try to enroll n clients simultaneously. This is the default.
@@ -28,11 +28,43 @@ The controller must have the following software installed:
     * `freeipa-client`
     * `at` (make sure to enable `atd` service too)
 * `server-image`: Vagrant image to use for the server. Default: `antorres/fedora-34-ipa-client`.
-* `private_key`: Path to an additional private key in case your image needs it to access via SSH.
+* `private-key`: Path to an additional private key in case your image needs it to access via SSH.
 
 ## Capturing results
 
 After executing the script, a `sync` directory will be created. There you will find logs gathered from all the machines deployed, including performance monitoring using SAR.
+
+## Development
+
+The package can be tested and developed in a python virtual environment.
+
+To create the virtual environment run:
+
+```
+$ python3 -m venv --system-site-packages venv
+$ venv/bin/pip install -e .
+```
+
+To use the environment:
+
+```
+$ source venv/bin/activate
+```
+
+To run the tool:
+
+```
+$ source venv/bin/activate
+$ ipaperftest
+```
+
+## Sample usage
+
+To run an enrollment test, with 100 clients and 2 replicas:
+
+```
+$ ipaperftest --test EnrollmentTest --replicas 2 --amount 100
+```
 
 ## Creating test users
 
