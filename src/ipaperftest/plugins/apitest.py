@@ -5,9 +5,13 @@
 import math
 import subprocess as sp
 import time
+import ansible_runner
 
 from ipaperftest.core.main import Plugin
-from ipaperftest.core.constants import MACHINE_CONFIG_TEMPLATE
+from ipaperftest.core.constants import (
+    MACHINE_CONFIG_TEMPLATE,
+    ANSIBLE_APITEST_CLIENT_CONFIG_PLAYBOOK,
+)
 from ipaperftest.plugins.registry import registry
 
 
@@ -23,7 +27,7 @@ class APITest(Plugin):
                     machine_name=machine_name,
                     box=ctx.params['client_image'],
                     hostname=machine_name + "." + self.domain.lower(),
-                    memory_size=384,
+                    memory_size=768,
                     cpus_number=1,
                     extra_commands="",
                     ip=next(self.ip_generator),
@@ -36,25 +40,21 @@ class APITest(Plugin):
 
     def run(self, ctx):
         print("Deploying clients...")
-        clients = [name for name, ip in self.hosts.items() if name.startswith("client")]
-        client_cmds = [
-            "sudo rm -f /etc/resolv.conf",
-            "{{ echo 'nameserver {server}' | sudo tee -a /etc/resolv.conf; }}".format(
-                server=self.hosts["server"]
-            ),
-            "sudo ipa-client-install -p admin -w password -U "
-            "--enable-dns-updates --no-nisdomain -N",
-            "{ echo password | kinit admin; }",
-        ]
-        for client in clients:
-            sp.run(
-                'vagrant ssh {} -c "{}"'.format(client, " && ".join(client_cmds)),
-                shell=True,
-                stdout=sp.PIPE,
-                stderr=sp.PIPE,
-            )
+
+        args = {
+            "server_ip": self.hosts["server"],
+            "domain": self.domain
+        }
+        self.run_ansible_playbook_from_template(ANSIBLE_APITEST_CLIENT_CONFIG_PLAYBOOK,
+                                                "apitest_client_config", args, ctx)
+        ansible_runner.run(private_data_dir="runner_metadata",
+                           playbook="ansible-freeipa/playbooks/install-client.yml",
+                           verbosity=1,
+                           cmdline="--ssh-extra-args '-F vagrant-ssh-config' "
+                                   "--flush-cache")
 
         # Wait 2 min per client before running the commands
+        clients = [name for name, ip in self.hosts.items() if name.startswith("client")]
         local_run_time = (
             sp.run(
                 "vagrant ssh server -c 'date --date now+{}min +%H:%M'".format(
@@ -70,10 +70,13 @@ class APITest(Plugin):
 
         for i in range(ctx.params['amount']):
             client_idx = math.floor(i / 50)
+            self.custom_logs.append("command{}log".format(str(i)))
             formated_api_cmd = ctx.params['command'].format(id=str(i))
             cmd = (
-                r"echo 'echo {cmd} > ~/command{id}log; {cmd} >> "
-                r"~/command{id}log 2>&1; echo \$? >> ~/command{id}log' "
+                r"echo password | kinit admin;"
+                r"echo 'echo {cmd} > ~/command{id}log;"
+                r"{cmd} >> ~/command{id}log 2>&1;"
+                r"echo \$? >> ~/command{id}log' "
                 r"| at {time}".format(
                  cmd=formated_api_cmd, id=str(i), time=local_run_time)
             )
@@ -129,8 +132,6 @@ class APITest(Plugin):
             print(rc_str)
             if file_lines[-1] == "0":
                 commands_succeeded += 1
-            with open("sync/command{}log".format(str(i)), "w") as f:
-                f.writelines("\n".join(file_lines))
         print("Return codes written to sync directory.")
         with open("sync/returncodes", "w") as f:
             f.write(returncodes)

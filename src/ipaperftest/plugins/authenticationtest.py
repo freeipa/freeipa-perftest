@@ -8,7 +8,12 @@ import subprocess as sp
 import time
 
 from ipaperftest.core.main import Plugin
-from ipaperftest.core.constants import MACHINE_CONFIG_TEMPLATE
+from ipaperftest.core.constants import (
+    MACHINE_CONFIG_TEMPLATE,
+    ANSIBLE_AUTHENTICATIONTEST_SERVER_CONFIG_PLAYBOOK,
+    ANSIBLE_AUTHENTICATIONTEST_CLIENT_CONFIG_PLAYBOOK,
+    ANSIBLE_COUNT_IPA_HOSTS_PLAYBOOK
+)
 from ipaperftest.plugins.registry import registry
 
 
@@ -35,41 +40,37 @@ class AuthenticationTest(Plugin):
                 )
             )
 
+    def validate_options(self, ctx):
+        if not ctx.params.get('threads'):
+            raise RuntimeError('threads number is required')
+
     def run(self, ctx):
-        server_cmds = [
-            "sudo dnf -y install python3-click",
-            "python create-test-data.py --hosts {} --outfile userdata.ldif".format(
-                 ctx.params["amount"]
-            ),
-            "echo password | kinit admin",
-            "ipa config-mod --enable-migration=true",
-            "ldapadd -x -D 'cn=Directory Manager' -w password -f userdata.ldif",
-            "python set-password.py --dm-password password --hosts {} --users-per-host {}".format(
-                ctx.params["amount"], ctx.params["threads"]
-            ),
-            "ipa config-mod --enable-migration=false",
-        ]
-        for file in ("create-test-data.py", "set-password.py"):
-            sp.run(
-                'vagrant upload {} server'.format(file),
-                shell=True,
-                stdout=sp.PIPE,
-                stderr=sp.PIPE,
-            )
-        sp.run(
-            'vagrant ssh server -c "{}"'.format(" && ".join(server_cmds)),
-            shell=True,
-            stdout=sp.PIPE,
-            stderr=sp.PIPE,
+        # TODO: this should be moved to a resources folder
+        sp.run(["cp", "set-password.py", "runner_metadata/"])
+        sp.run(["cp", "create-test-data.py", "runner_metadata/"])
+
+        # Configure server before execution
+        args = {
+            "amount": ctx.params["amount"],
+            "threads": ctx.params["threads"]
+        }
+        self.run_ansible_playbook_from_template(
+            ANSIBLE_AUTHENTICATIONTEST_SERVER_CONFIG_PLAYBOOK,
+            "authenticationtest_server_config", args, ctx
         )
 
+        # Configure clients before installation
+        args = {
+            "server_ip": self.hosts["server"],
+            "domain": self.domain
+        }
+        self.run_ansible_playbook_from_template(
+            ANSIBLE_AUTHENTICATIONTEST_CLIENT_CONFIG_PLAYBOOK,
+            "authenticationtest_client_config", args, ctx
+        )
+
+        # Clients installation
         client_cmds = [
-            "sudo dnf -y copr enable antorres/freeipa-perftest",
-            "sudo dnf -y install freeipa-perftest-client",
-            "sudo rm -f /etc/resolv.conf",
-            "{{ echo 'nameserver {server}' | sudo tee -a /etc/resolv.conf; }}".format(
-                server=self.hosts["server"]
-            ),
             "sudo ipa-client-install -p admin -w password -U "
             "--enable-dns-updates --no-nisdomain -N",
         ]
@@ -115,24 +116,11 @@ class AuthenticationTest(Plugin):
             f.write(clients_returncodes)
 
         # Check all hosts have been registered in server
-        kinit_cmd = "echo password | kinit admin"
-        host_find_cmd = "ipa host-find --sizelimit=0 | grep 'Host name:' | wc -l"
-        sp.run(
-            'vagrant ssh server -c "{}"'.format(kinit_cmd),
-            shell=True,
-            stdout=sp.PIPE,
-            stderr=sp.PIPE,
+        ansible_ret = self.run_ansible_playbook_from_template(
+            ANSIBLE_COUNT_IPA_HOSTS_PLAYBOOK,
+            "enrollmenttest_count_hosts", {}, ctx
         )
-        host_find_output = (
-            sp.run(
-                'vagrant ssh server -c "{}"'.format(host_find_cmd),
-                shell=True,
-                stdout=sp.PIPE,
-                stderr=sp.PIPE,
-            )
-            .stdout.decode("utf-8")
-            .strip()
-        )
+        host_find_output = ansible_ret.get_fact_cache("server")["host_find_output"]
         try:
             if (
                 int(host_find_output) == self.clients_succeeded + non_client_hosts
@@ -145,9 +133,7 @@ class AuthenticationTest(Plugin):
                     "host-find output. Check for failures during installation."
                 )
                 print("Hosts found in host-find: %s" % str(host_find_output))
-                print(
-                    "Hosts that returned 0 during install: %s" % self.clients_succeeded
-                )
+                print("Hosts that returned 0 during install: %s" % self.clients_succeeded)
         except ValueError:
             print(
                 "Failed converting IPA host-find output to int. Value was: %s"
@@ -166,13 +152,12 @@ class AuthenticationTest(Plugin):
             if host == "server" or host.startswith("replica"):
                 continue
             installed += 1
-            # spread the client install time to hopefully have all pass
+            # spread the pamtest execution
             if installed % 30 == 0:
                 sleep_time += 20
             cmds = [
                 "sleep $(( {} - $(date +%s) ))".format(str(client_auth_time)),
-                "sudo sed -i 's/session    required     pam_loginuid.so//' /etc/pam.d/login",
-                "sudo pamtest --threads 10 -o pamtest.log",
+                "sudo pamtest --threads {} -o pamtest.log".format(str(ctx.params["threads"])),
             ]
             proc = sp.Popen(
                 'vagrant ssh {host} -c "{cmd}"'.format(
