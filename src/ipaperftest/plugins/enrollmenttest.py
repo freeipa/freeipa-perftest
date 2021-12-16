@@ -7,7 +7,11 @@ import time
 import os
 
 from ipaperftest.core.main import Plugin
-from ipaperftest.core.constants import MACHINE_CONFIG_TEMPLATE
+from ipaperftest.core.constants import (
+    MACHINE_CONFIG_TEMPLATE,
+    ANSIBLE_ENROLLMENTTEST_CLIENT_CONFIG_PLAYBOOK,
+    ANSIBLE_COUNT_IPA_HOSTS_PLAYBOOK
+)
 from ipaperftest.plugins.registry import registry
 
 
@@ -31,16 +35,20 @@ class EnrollmentTest(Plugin):
             )
 
     def run(self, ctx):
+        # Configure clients before installation
+        args = {
+            "server_ip": self.hosts["server"],
+            "domain": self.domain
+        }
+        self.run_ansible_playbook_from_template(ANSIBLE_ENROLLMENTTEST_CLIENT_CONFIG_PLAYBOOK,
+                                                "enrollmenttest_client_config", args, ctx)
+
         # Client installations will be triggered at now + 1min per 30 clients
         client_install_time = (
             int(time.time()) + max(int(len(self.hosts.keys()) / 30), 1) * 60
         )
 
         client_cmds = [
-            "sudo rm -f /etc/resolv.conf",
-            "{{ echo 'nameserver {server}' | sudo tee -a /etc/resolv.conf; }}".format(
-                server=self.hosts["server"]
-            ),
             "sleep $(( {} - $(date +%s) ))".format(str(client_install_time)),
             "sudo ipa-client-install -p admin -w password -U "
             "--enable-dns-updates --no-nisdomain -N",
@@ -82,24 +90,11 @@ class EnrollmentTest(Plugin):
             f.write(clients_returncodes)
 
         # Check all hosts have been registered in server
-        kinit_cmd = "echo password | kinit admin"
-        host_find_cmd = "ipa host-find --sizelimit=0 | grep 'Host name:' | wc -l"
-        sp.run(
-            'vagrant ssh server -c "{}"'.format(kinit_cmd),
-            shell=True,
-            stdout=sp.PIPE,
-            stderr=sp.PIPE,
+        ansible_ret = self.run_ansible_playbook_from_template(
+            ANSIBLE_COUNT_IPA_HOSTS_PLAYBOOK,
+            "enrollmenttest_count_hosts", {}, ctx
         )
-        host_find_output = (
-            sp.run(
-                'vagrant ssh server -c "{}"'.format(host_find_cmd),
-                shell=True,
-                stdout=sp.PIPE,
-                stderr=sp.PIPE,
-            )
-            .stdout.decode("utf-8")
-            .strip()
-        )
+        host_find_output = ansible_ret.get_fact_cache("server")["host_find_output"]
         try:
             if (
                 int(host_find_output) == self.clients_succeeded + non_client_hosts
@@ -112,9 +107,7 @@ class EnrollmentTest(Plugin):
                     "host-find output. Check for failures during installation."
                 )
                 print("Hosts found in host-find: %s" % str(host_find_output))
-                print(
-                    "Hosts that returned 0 during install: %s" % self.clients_succeeded
-                )
+                print("Hosts that returned 0 during install: %s" % self.clients_succeeded)
         except ValueError:
             print(
                 "Failed converting IPA host-find output to int. Value was: %s"

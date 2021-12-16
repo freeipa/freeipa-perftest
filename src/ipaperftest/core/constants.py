@@ -2,6 +2,7 @@
 # Copyright (C) 2021 FreeIPA Contributors see COPYING for license
 #
 
+# flake8: noqa
 
 VAGRANTFILE_TEMPLATE = """
     Vagrant.configure("2") do |config|
@@ -64,6 +65,10 @@ ipareplica_auto_reverse=yes
 ipaadmin_password=password
 ipaserver_domain={domain}
 ipaserver_realm={realm}
+ipaadmin_password=password
+ipasssd_enable_dns_updates=yes
+ipaclient_no_nisdomain=yes
+ipaclient_no_ntp=yes
 """
 
 
@@ -79,7 +84,7 @@ ANSIBLE_FETCH_FILES_PLAYBOOK = """
 ---
 - name: Fetch IPA server log files
   hosts: ipaserver, ipareplicas
-  become: true
+  become: yes
   tasks:
     - synchronize:
         src: "{{{{ item }}}}"
@@ -97,7 +102,7 @@ ANSIBLE_FETCH_FILES_PLAYBOOK = """
 
 - name: Fetch IPA clients log files
   hosts: ipaclients
-  become: true
+  become: yes
   tasks:
     - synchronize:
         src: "{{{{ item }}}}"
@@ -108,4 +113,167 @@ ANSIBLE_FETCH_FILES_PLAYBOOK = """
         - "/var/log/ipaclient-install.log"
 {custom_logs}
 
+"""
+
+ANSIBLE_SERVER_CONFIG_PLAYBOOK = """
+---
+- name: Configure server before installation
+  hosts: ipaserver
+  become: yes
+  tasks:
+    - sysctl:
+        name: net.ipv6.conf.all.disable_ipv6
+        value: '0'
+        sysctl_set: yes
+    - replace:
+        path: /etc/hosts
+        regexp: '127.*.*.*\\s*server'
+        replace: '{server_ip} server.{domain} server/'
+"""
+
+ANSIBLE_REPLICA_CONFIG_PLAYBOOK = """
+---
+- name: Configure {replica_name} before installation
+  hosts: {replica_name}
+  become: yes
+  tasks:
+    - lineinfile:
+        path: /etc/hosts
+        line: '{server_ip} server.{domain} server'
+    - lineinfile:
+        path: /etc/resolv.conf
+        line: nameserver {server_ip}
+    - lineinfile:
+        path: /etc/hosts
+        regexp: '127.*.*.*\\s*replica*'
+        state: absent
+    - lineinfile:
+        path: /etc/hosts
+        line: {replica_ip} {replica_name}.{domain} {replica_name}
+"""
+
+ANSIBLE_ENABLE_DATA_COLLECTION_PLAYBOOK = """
+---
+- name: Enable data collection using SAR
+  hosts: ipaserver
+  tasks:
+    - shell:
+        cmd: "nohup sar -o ~/saroutput 2 >/dev/null 2>&1 &"
+"""
+
+ANSIBLE_ENROLLMENTTEST_CLIENT_CONFIG_PLAYBOOK = """
+---
+- name: Configure client machines before installation
+  hosts: ipaclients
+  become: yes
+  tasks:
+    - lineinfile:
+        path: /etc/resolv.conf
+        regexp: ".*"
+        state: absent
+    - lineinfile:
+        path: /etc/resolv.conf
+        line: nameserver {server_ip}
+    - lineinfile:
+        path: /etc/hosts
+        line: {server_ip} server.{domain} server
+"""
+
+ANSIBLE_COUNT_IPA_HOSTS_PLAYBOOK = """
+---
+- name: Count hosts registered in IPA server
+  hosts: ipaserver
+  tasks:
+    - command: "kinit admin"
+      args:
+        stdin: "password"
+    - shell:
+        cmd: "ipa host-find --sizelimit=0 | grep 'Host name:' | wc -l"
+      register: host_find_output
+    - set_fact:
+        host_find_output: "{{{{ host_find_output.stdout }}}}"
+        cacheable: yes
+"""
+
+ANSIBLE_APITEST_CLIENT_CONFIG_PLAYBOOK = """
+---
+- name: Configure client machines before installation
+  hosts: ipaclients
+  become: yes
+  tasks:
+    - lineinfile:
+        path: /etc/resolv.conf
+        regexp: ".*"
+        state: absent
+    - lineinfile:
+        path: /etc/resolv.conf
+        line: nameserver {server_ip}
+    - lineinfile:
+        path: /etc/hosts
+        line: {server_ip} server.{domain} server
+"""
+
+ANSIBLE_AUTHENTICATIONTEST_SERVER_CONFIG_PLAYBOOK = """
+---
+- name: Configure server before execution
+  hosts: ipaserver
+  become: yes
+  tasks:
+    - synchronize:
+        src: "{{{{ item }}}}"
+        dest: "/root"
+        mode: push
+        use_ssh_args: yes
+      with_items:
+        - create-test-data.py
+        - set-password.py
+    - package:
+        name: python3-click
+        state: present
+    - command:
+        cmd: "python create-test-data.py --hosts {amount} --outfile userdata.ldif --users-per-host {threads}"
+        chdir: /root
+    - command: "kinit admin"
+      args:
+        stdin: "password"
+    - ipaconfig:
+        enable_migration: yes
+    - command:
+        cmd: "ldapadd -x -D 'cn=Directory Manager' -w password -f userdata.ldif"
+        chdir: /root
+    - command:
+        cmd: "python set-password.py --dm-password password --hosts {amount} --users-per-host {threads}"
+        chdir: /root
+    - ipaconfig:
+        enable_migration: no
+"""
+
+ANSIBLE_AUTHENTICATIONTEST_CLIENT_CONFIG_PLAYBOOK = """
+---
+- name: Configure clients before installation
+  hosts: ipaclients
+  become: yes
+  tasks:
+    - yum_repository:
+        name: freeipa_freeipa-perftest-copr-repo
+        baseurl: https://download.copr.fedorainfracloud.org/results/@freeipa/freeipa-perftest/fedora-$releasever-$basearch/
+        gpgkey: https://download.copr.fedorainfracloud.org/results/@freeipa/freeipa-perftest/pubkey.gpg
+        description: "Copr repo for freeipa-perftest owned by @freeipa"
+    - package:
+        name: freeipa-perftest-client
+        state: present
+    - lineinfile:
+        path: /etc/resolv.conf
+        regexp: ".*"
+        state: absent
+    - lineinfile:
+        path: /etc/resolv.conf
+        line: nameserver {server_ip}
+    - lineinfile:
+        path: /etc/hosts
+        line: {server_ip} server.{domain} server
+    - lineinfile:
+        path: /etc/pam.d/login
+        regexp: "\\\\.*pam_loginuid.so"
+        state: absent
 """
