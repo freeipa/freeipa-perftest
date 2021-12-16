@@ -15,6 +15,7 @@ BuildRequires:  autoconf
 BuildRequires:  automake
 BuildRequires:  gcc
 BuildRequires:	python3-devel
+BuildRequires:  python3-setuptools
 
 %description
 freeipa-perftest is a performance measurement tool for
