@@ -5,6 +5,7 @@
 import subprocess as sp
 import time
 import os
+from datetime import datetime
 
 from ipaperftest.core.main import Plugin
 from ipaperftest.core.constants import (
@@ -113,6 +114,14 @@ class EnrollmentTest(Plugin):
                 "Failed converting IPA host-find output to int. Value was: %s"
                 % host_find_output
             )
+
+        self.results_archive_name = "EnrollmentTest-{}-{}-{}servers-{}clients-{}fails".format(
+            datetime.now().strftime("%FT%H%MZ"),
+            ctx.params['server_image'].replace("/", ""),
+            non_client_hosts,
+            len(processes),
+            len(processes) - self.clients_succeeded
+        )
 
         return
 

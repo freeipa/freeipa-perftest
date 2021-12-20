@@ -9,6 +9,8 @@ import subprocess as sp
 import sys
 import time
 import ansible_runner
+import tarfile
+from datetime import datetime
 
 from ipaperftest.core.constants import (
     VAGRANTFILE_TEMPLATE,
@@ -72,6 +74,8 @@ class Plugin:
         self.machine_configs = []
         self.hosts = dict()
         self.custom_logs = []
+        self.results_archive_name = \
+            "perftest-results-%s" % datetime.now().strftime("%FT%H%MZ")
 
     # IPs will be like 192.168.x.y
     def generate_ip(self):
@@ -342,6 +346,17 @@ class Plugin:
         """Analyze log files for failures, patterns, etc"""
         pass
 
+    def archive_results(self, ctx):
+        """ Create tar with logs and metadata"""
+        with tarfile.open(self.results_archive_name + ".tar.gz", "w:gz") as tar:
+            files_to_add = [
+                "sync/",
+                "runner_metadata",
+                "Vagrantfile"
+            ]
+            for f in files_to_add:
+                tar.add(f)
+
     def validate_options(self, ctx):
         pass
 
@@ -369,6 +384,7 @@ class Plugin:
         self.run(ctx)
         self.collect_logs(ctx)
         self.post_process_logs(ctx)
+        self.archive_results(ctx)
 
 
 def find_registries(entry_points):
