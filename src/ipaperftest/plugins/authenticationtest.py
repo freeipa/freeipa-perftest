@@ -6,6 +6,7 @@ import os
 import random
 import subprocess as sp
 import time
+from datetime import datetime
 
 from ipaperftest.core.main import Plugin
 from ipaperftest.core.constants import (
@@ -215,4 +216,11 @@ class AuthenticationTest(Plugin):
         total_percentage = round((total_successes / total_threads) * 100)
         print("{} threads out of {} succeeded ({}%)".format(
             total_successes, total_threads, total_percentage)
+        )
+
+        self.results_archive_name = "AuthenticationTest-{}-{}-{}threads-{}fails".format(
+            datetime.now().strftime("%FT%H%MZ"),
+            ctx.params['server_image'].replace("/", ""),
+            total_threads,
+            total_successes
         )

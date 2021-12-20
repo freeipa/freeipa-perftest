@@ -6,6 +6,7 @@ import math
 import subprocess as sp
 import time
 import ansible_runner
+from datetime import datetime
 
 from ipaperftest.core.main import Plugin
 from ipaperftest.core.constants import (
@@ -140,3 +141,10 @@ class APITest(Plugin):
             print("All commands executed succesfully.")
         else:
             print("ERROR: not all commands completed succesfully. Check logs.")
+
+        self.results_archive_name = "APITest-{}-{}-{}commands-{}fails".format(
+            datetime.now().strftime("%FT%H%MZ"),
+            ctx.params['server_image'].replace("/", ""),
+            ctx.params['amount'],
+            ctx.params['amount'] - commands_succeeded
+        )
