@@ -7,12 +7,14 @@ import time
 import os
 from datetime import datetime
 
-from ipaperftest.core.main import Plugin
+from ipaperftest.core.plugin import Plugin, Result
 from ipaperftest.core.constants import (
+    SUCCESS,
+    WARNING,
+    ERROR,
     MACHINE_CONFIG_TEMPLATE,
     ANSIBLE_ENROLLMENTTEST_CLIENT_CONFIG_PLAYBOOK,
-    ANSIBLE_COUNT_IPA_HOSTS_PLAYBOOK
-)
+    ANSIBLE_COUNT_IPA_HOSTS_PLAYBOOK)
 from ipaperftest.plugins.registry import registry
 
 
@@ -101,19 +103,16 @@ class EnrollmentTest(Plugin):
                 int(host_find_output) == self.clients_succeeded + non_client_hosts
                 and len(self.hosts.keys()) == self.clients_succeeded + non_client_hosts
             ):
-                print("All clients enrolled succesfully.")
+                yield Result(self, SUCCESS, msg="All clients enrolled succesfully.")
             else:
-                print(
-                    "ERROR: client installs succeeded number does not match "
-                    "host-find output. Check for failures during installation."
-                )
-                print("Hosts found in host-find: %s" % str(host_find_output))
-                print("Hosts that returned 0 during install: %s" % self.clients_succeeded)
+                yield Result(self, ERROR,
+                             error="Client installs succeeded number (%s) "
+                             "does not match host-find output (%s)."
+                             % (self.clients_succeeded, host_find_output))
         except ValueError:
-            print(
-                "Failed converting IPA host-find output to int. Value was: %s"
-                % host_find_output
-            )
+            yield Result(self, ERROR,
+                         error="Failed to convert host-find output to int. Value was: %s"
+                         % host_find_output)
 
         self.results_archive_name = "EnrollmentTest-{}-{}-{}servers-{}clients-{}fails".format(
             datetime.now().strftime("%FT%H%MZ"),
@@ -139,7 +138,7 @@ class EnrollmentTest(Plugin):
                 try:
                     logstr = open(logpath).readlines()
                 except FileNotFoundError:
-                    print("File {} not found.".format(logpath))
+                    yield Result(self, WARNING, msg="File %s not found" % logpath)
                     continue
                 for line in logstr:
                     if "discovered server" in line:
@@ -152,5 +151,6 @@ class EnrollmentTest(Plugin):
 
         for server, enrollments in server_count.items():
             percentage = round((enrollments / n_clients) * 100)
-            print("Server {} managed {} out of {} enrollments ({}%)".format(
-                server, enrollments, n_clients, percentage))
+            yield Result(self, SUCCESS,
+                         msg="Server %s managed %s out of %s enrollments (%s)"
+                         % (server, enrollments, n_clients, percentage))
