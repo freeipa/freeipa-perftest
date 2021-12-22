@@ -16,23 +16,39 @@ The controller must have the following software installed:
 
 ## Usage
 
-`ipaperftest [OPTIONS]`
+```
+Usage: ipaperftest [OPTIONS]
 
-* `test`: Test to perform. Current options are:
-  * `EnrollmentTest`: Try to enroll n clients simultaneously. This is the default.
-  * `APITest`: Try to run IPA command n times simultaneously.
-* `amount`: Size of the test. For example, in the case of `EnrollmentTest`, it will create this amount of clients. 
-* `replicas`: Number of replicas to deploy. Currently limited to 2.
-* `command`: Command to run. Only relevant when using `APITest`. Use `{id}` for getting an unique ID into the command. Example: `ipa user-add user{id}`.
-* `client-image`: Vagrant image to use for the clients. Default: `antorres/fedora-34-ipa-client`. If you use a different image, make sure it has all the needed packages installed:
-    * `freeipa-client`
-    * `at` (make sure to enable `atd` service too)
-* `server-image`: Vagrant image to use for the server. Default: `antorres/fedora-34-ipa-client`.
-* `private-key`: Path to an additional private key in case your image needs it to access via SSH.
+Options:
+  --test TEXT               Test to execute.  [default: EnrollmentTest]
+  --client-image TEXT       Vagrant image to use for clients.  [default:
+                            antorres/fedora-34-ipa-client]
+
+  --server-image TEXT       Vagrant image to use for server.  [default:
+                            antorres/fedora-34-ipa-client]
+
+  --amount INTEGER          Size of the test.  [default: 1]
+  --replicas INTEGER RANGE  Number of replicas to create.  [default: 0]
+  --threads INTEGER         Threads to run per client during
+                            AuthenticationTest.  [default: 10]
+
+  --command TEXT            Command to execute during APITest.
+  --private-key TEXT        Private key needed to access VMs in case the
+                            Vagrant default is not enough.
+
+  --results-format [json|human]  Format to use for results output  [default:
+                                 json]
+
+  --results-output-file TEXT     File to write results output to
+  --help                    Show this message and exit.  [default: False]
+```
 
 ## Capturing results
 
-After executing the script, a `sync` directory will be created. There you will find logs gathered from all the machines deployed, including performance monitoring using SAR.
+After executing the script, a `sync` directory will be created. There you will find logs gathered from all the machines
+deployed, including performance monitoring using SAR.
+
+A tarball will be created containing the sync directory and metadata like Ansible playbooks and Vagrantfile.
 
 ## Development
 
@@ -65,6 +81,41 @@ To run an enrollment test, with 100 clients and 2 replicas:
 ```
 $ ipaperftest --test EnrollmentTest --replicas 2 --amount 100
 ```
+
+## Available tests
+
+### EnrollmentTest
+
+Try to enroll n clients simultaneously, n being the amount especified using the `amount` option.
+During this test, n client machines are created and configurated.
+After this, they are all scheduled to launch `ipa-client-install` at the same time. A wait is added to ensure
+all machines are properly configured before the client installation time. Once all the install processes exit,
+the results are retrieved. To ensure that enrollment went well on both ends, clients successes are counted and
+compared against the output of `ipa host-find` on the server.
+
+If using replicas, the distribution of enrollments between servers will be shown after the test.
+
+## AuthenticationTest
+
+Perform authentication attempts against the server. The number of clients deployed is set using the `amount` option,
+and the amount of authentication threads per client is defined using the `threads` option, so the total amount of
+authentication attemps performed is `amount` * `threads`.
+
+Before launching the authentications both server and clients are configured. Test users are created using the
+`create-test-data.py` and `set-password.py` scripts, as explained below. After this, authentications are attempted
+using the `pamtest` tool. A file named `pamtest.log` will be created for each client, containing logs from this run.
+
+After the test execution, percentage of succeeded attempts will be shown, both per client and in total.
+
+## APITest
+
+This tests runs the same command n times simultaneously. The command is specified using the `command` option. The
+wildcard `{id}` is permitted for commands that required variability to run properly (for example, it can be used
+as a username so that the `user-add` command can be run multiple times without failing). The amount of commands to
+run is set using the `amount` options, and these commands will be run from clients deployed before the test. Each
+client deployed will run a maximum of 50 commands. These commands are scheduled on the client using the `at` tool.
+
+After the execution of the test, output from the commands will be written to the `sync` directory.
 
 ## Creating test users
 
