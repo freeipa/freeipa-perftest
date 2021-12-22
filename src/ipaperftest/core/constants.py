@@ -3,6 +3,44 @@
 #
 
 # flake8: noqa
+# Error reporting result
+SUCCESS = 0
+WARNING = 10
+ERROR = 20
+CRITICAL = 30
+
+_levelToName = {
+    SUCCESS: 'SUCCESS',
+    WARNING: 'WARNING',
+    ERROR: 'ERROR',
+    CRITICAL: 'CRITICAL',
+}
+
+_nameToLevel = {
+    'SUCCESS': SUCCESS,
+    'WARNING': WARNING,
+    'ERROR': ERROR,
+    'CRITICAL': CRITICAL,
+}
+
+
+def getLevelName(level):
+    """
+    Translate between level constants and their textual mappings.
+
+    If the level is one of the predefined levels then returns the
+    corresponding string.
+
+    If a numeric value corresponding to one of the defined levels
+    is passed in instead the corresponding string representation is
+    returned.
+    """
+    name = _levelToName.get(level) or _nameToLevel.get(level)
+    if name is not None:
+        return name
+
+    return level
+
 
 VAGRANTFILE_TEMPLATE = """
     Vagrant.configure("2") do |config|

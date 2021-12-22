@@ -8,11 +8,12 @@ import time
 import ansible_runner
 from datetime import datetime
 
-from ipaperftest.core.main import Plugin
+from ipaperftest.core.plugin import Plugin, Result
 from ipaperftest.core.constants import (
+    SUCCESS,
+    ERROR,
     MACHINE_CONFIG_TEMPLATE,
-    ANSIBLE_APITEST_CLIENT_CONFIG_PLAYBOOK,
-)
+    ANSIBLE_APITEST_CLIENT_CONFIG_PLAYBOOK)
 from ipaperftest.plugins.registry import registry
 
 
@@ -139,9 +140,11 @@ class APITest(Plugin):
             f.write(returncodes)
 
         if commands_succeeded == ctx.params['amount']:
-            print("All commands executed succesfully.")
+            yield Result(self, SUCCESS, msg="All commands executed successfully.")
         else:
-            print("ERROR: not all commands completed succesfully. Check logs.")
+            yield Result(self, ERROR,
+                         error="Not all commands completed succesfully (%s/%s). "
+                         "Check logs." % (commands_succeeded, ctx.params['amount']))
 
         self.results_archive_name = "APITest-{}-{}-{}commands-{}fails".format(
             datetime.now().strftime("%FT%H%MZ"),

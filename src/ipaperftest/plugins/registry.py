@@ -2,7 +2,7 @@
 # Copyright (C) 2021 FreeIPA Contributors see COPYING for license
 #
 
-from ipaperftest.core.main import Registry
+from ipaperftest.core.plugin import Registry
 
 
 class PluginRegistry(Registry):

@@ -8,13 +8,15 @@ import subprocess as sp
 import time
 from datetime import datetime
 
-from ipaperftest.core.main import Plugin
+from ipaperftest.core.plugin import Plugin, Result
 from ipaperftest.core.constants import (
+    SUCCESS,
+    WARNING,
+    ERROR,
     MACHINE_CONFIG_TEMPLATE,
     ANSIBLE_AUTHENTICATIONTEST_SERVER_CONFIG_PLAYBOOK,
     ANSIBLE_AUTHENTICATIONTEST_CLIENT_CONFIG_PLAYBOOK,
-    ANSIBLE_COUNT_IPA_HOSTS_PLAYBOOK
-)
+    ANSIBLE_COUNT_IPA_HOSTS_PLAYBOOK)
 from ipaperftest.plugins.registry import registry
 
 
@@ -127,19 +129,16 @@ class AuthenticationTest(Plugin):
                 int(host_find_output) == self.clients_succeeded + non_client_hosts
                 and len(self.hosts.keys()) == self.clients_succeeded + non_client_hosts
             ):
-                print("All clients enrolled succesfully.")
+                yield Result(self, SUCCESS, msg="All clients enrolled succesfully.")
             else:
-                print(
-                    "ERROR: client installs succeeded number does not match "
-                    "host-find output. Check for failures during installation."
-                )
-                print("Hosts found in host-find: %s" % str(host_find_output))
-                print("Hosts that returned 0 during install: %s" % self.clients_succeeded)
+                yield Result(self, ERROR,
+                             error="Client installs succeeded number (%s) "
+                             "does not match host-find output (%s)." %
+                             (self.clients_succeeded, host_find_output))
         except ValueError:
-            print(
-                "Failed converting IPA host-find output to int. Value was: %s"
-                % host_find_output
-            )
+            yield Result(self, ERROR,
+                         error="Failed to convert host-find output to int. "
+                               "Value was: %s" % host_find_output)
 
         # Client authentications will be triggered at now + 1min per 30 clients
         client_auth_time = (
@@ -183,15 +182,15 @@ class AuthenticationTest(Plugin):
 
         total_successes = 0
         total_threads = 0
-        for f in os.listdir("sync"):
-            if not f.startswith("client"):
+        for host in os.listdir("sync"):
+            if not host.startswith("client"):
                 continue
 
-            logpath = "sync/{}/pamtest.log".format(f)
+            logpath = "sync/{}/pamtest.log".format(host)
             try:
                 logstr = open(logpath).readlines()
             except FileNotFoundError:
-                print("File {} not found.".format(logpath))
+                yield Result(self, WARNING, msg="File %s not found" % logpath)
                 continue
 
             n_threads = 0
@@ -206,17 +205,30 @@ class AuthenticationTest(Plugin):
                     n_succeeded += 1
 
             percentage = round((n_succeeded / n_threads) * 100)
-            print("{} had {} successes out of {} threads ({}%)".format(
-                f, n_succeeded, n_threads, percentage)
-            )
+            if percentage == 100:
+                yield Result(self, SUCCESS, msg="All threads on %s succeeded." % host)
+            else:
+                yield Result(self, ERROR,
+                             error="Not all threads on %s succeded: %s/%s (%s)."
+                             % (host, n_succeeded, n_threads, percentage))
 
             total_successes += n_succeeded
             total_threads += n_threads
 
         total_percentage = round((total_successes / total_threads) * 100)
+        yield Result(self, ERROR,
+                     error="None of the threads returned results.")
+
         print("{} threads out of {} succeeded ({}%)".format(
             total_successes, total_threads, total_percentage)
         )
+
+        if total_percentage == 100:
+            yield Result(self, SUCCESS, msg="All threads succeded.")
+        else:
+            yield Result(self, ERROR,
+                         error="Not all threads succeeded: %s/%s (%s)."
+                         % (total_successes, total_threads, total_percentage))
 
         self.results_archive_name = "AuthenticationTest-{}-{}-{}threads-{}fails".format(
             datetime.now().strftime("%FT%H%MZ"),
