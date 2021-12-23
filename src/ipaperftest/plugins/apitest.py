@@ -20,7 +20,9 @@ from ipaperftest.plugins.registry import registry
 class APITest(Plugin):
 
     def generate_clients(self, ctx):
-        for i in range(ctx.params['amount']):
+        self.commands_per_client = 25
+        n_clients = math.ceil(ctx.params['amount'] / self.commands_per_client)
+        for i in range(n_clients):
             idx = str(i).zfill(3)
             machine_name = "client{}".format(idx)
             yield(
@@ -28,7 +30,7 @@ class APITest(Plugin):
                     machine_name=machine_name,
                     box=ctx.params['client_image'],
                     hostname=machine_name + "." + self.domain.lower(),
-                    memory_size=768,
+                    memory_size=2048,
                     cpus_number=1,
                     extra_commands="",
                     ip=next(self.ip_generator),
@@ -70,8 +72,7 @@ class APITest(Plugin):
         )
 
         for i in range(ctx.params['amount']):
-            client_idx = math.floor(i / 50)
-            self.custom_logs.append("command{}log".format(str(i)))
+            client_idx = math.floor(i / self.commands_per_client)
             formated_api_cmd = ctx.params['command'].format(id=str(i))
             cmd = (
                 r"echo password | kinit admin;"
@@ -115,7 +116,7 @@ class APITest(Plugin):
         commands_succeeded = 0
         returncodes = ""
         for i in range(ctx.params['amount']):
-            client_idx = math.floor(i / 50)
+            client_idx = math.floor(i / self.commands_per_client)
             file_lines = (
                 sp.run(
                     "vagrant ssh {host} -c 'cat ~/command{id}log'".format(
