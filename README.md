@@ -95,7 +95,7 @@ compared against the output of `ipa host-find` on the server.
 
 If using replicas, the distribution of enrollments between servers will be shown after the test.
 
-## AuthenticationTest
+### AuthenticationTest
 
 Perform authentication attempts against the server. The number of clients deployed is set using the `amount` option,
 and the amount of authentication threads per client is defined using the `threads` option, so the total amount of
@@ -107,7 +107,7 @@ using the `pamtest` tool. A file named `pamtest.log` will be created for each cl
 
 After the test execution, percentage of succeeded attempts will be shown, both per client and in total.
 
-## APITest
+### APITest
 
 This tests runs the same command n times simultaneously. The command is specified using the `command` option. The
 wildcard `{id}` is permitted for commands that required variability to run properly (for example, it can be used
