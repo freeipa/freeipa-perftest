@@ -19,7 +19,7 @@
 /* The only global, the name of the PAM service */
 char * pam_service = NULL;
 
-int *call_pam(void *ptr);
+int call_pam(void *ptr);
 
 FILE *fp = NULL;
 
@@ -49,7 +49,7 @@ int conv_static_password(int num_msg, const struct pam_message **msgm,
 
 static struct pam_conv conv = { conv_static_password, NULL };
 
-int *call_pam(void *username)
+int call_pam(void *username)
 {
     pam_handle_t *pamh;
     int result;
@@ -101,9 +101,12 @@ int main(int argc, const char **argv)
     char *service = NULL;
     char *logfile = NULL;
     int threads = -1;
+    int ipa_logins = 0;
+    int ad_logins = 0;
     pthread_t *ptr = NULL;
     int *index = NULL;
     char **usernames = NULL;
+    char **ad_usernames = NULL;
     int c, i;
     int ret = 0;
     struct utsname uinfo;
@@ -112,6 +115,7 @@ int main(int argc, const char **argv)
         {"outfile", 'o', POPT_ARG_STRING, NULL, 'o', NULL, "FILE"},
         {"service", 's', POPT_ARG_STRING, NULL, 's', NULL, "SERVICE"},
         {"threads", 't', POPT_ARG_INT, &threads, 0, NULL, NULL},
+        {"ad-threads", 'a', POPT_ARG_INT, &ad_logins, 0, NULL, NULL},
         POPT_AUTOHELP
         POPT_TABLEEND
     };
@@ -138,6 +142,13 @@ int main(int argc, const char **argv)
 
     if (threads == -1) {
         printf("--threads is required\n");
+        poptPrintUsage(pctx, stdout, 0);
+        ret = 1;
+        goto done;
+    }
+
+    if (ad_logins != 0 && ad_logins > threads) {
+        printf("The number of AD logins should be equal or lower than the amount of threads.\n");
         poptPrintUsage(pctx, stdout, 0);
         ret = 1;
         goto done;
@@ -173,25 +184,47 @@ int main(int argc, const char **argv)
         goto done;
     }
 
-    usernames = calloc(threads, 256);
+    ipa_logins = threads - ad_logins;
+
+    usernames = calloc(ipa_logins, 256);
     if (usernames == NULL) {
         ret = 1;
         goto done;
     }
 
-    for (i = 0; i < threads; i++) {
+    ad_usernames = calloc(ad_logins, 256);
+    if (ad_usernames == NULL) {
+        ret = 1;
+        goto done;
+    }
+
+    for (i = 0; i < ipa_logins; i++) {
         asprintf(&usernames[i], "user%d%s", i, uinfo.nodename);
-        index[i] = pthread_create(&ptr[i], NULL, call_pam, usernames[i]);
+        index[i] = pthread_create(&ptr[i], NULL, (void *) call_pam, usernames[i]);
+    }
+
+    for (i = 0; i < ad_logins; i++) {
+        // Since AD only allows SAM usernames of 20 or less characters, we can't use
+        // the user000client000.ipa.test format. Use user000client000 instead.
+        char host[10];
+        memcpy(host, uinfo.nodename, 9);
+        asprintf(&ad_usernames[i], "user%03d%s@ad.test", i, host);
+        index[ipa_logins + i] = pthread_create(&ptr[ipa_logins + i], NULL, (void *) call_pam, ad_usernames[i]);
     }
 
     for (i = 0; i < threads; i++) {
         pthread_join(ptr[i], NULL);
     }
 
-    for (i = 0; i < threads; i++) {
+    for (i = 0; i < ad_logins; i++) {
+        free(ad_usernames[i]);
+    }
+
+    for (i = 0; i < ipa_logins; i++) {
         free(usernames[i]);
     }
 
+    free(ad_usernames);
     free(usernames);
     free(index);
     free(ptr);

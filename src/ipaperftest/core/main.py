@@ -123,6 +123,8 @@ class RunTest:
     help="Number of replicas to create.",
 )
 @click.option("--threads", default=10, help="Threads to run per client during AuthenticationTest.")
+@click.option("--ad-threads", default=0, help="Active Directory login threads "
+                                              "to run per client during AuthenticationTest.")
 @click.option("--command", help="Command to execute during APITest.")
 @click.option(
     "--private-key",
@@ -147,6 +149,7 @@ def main(
     server_image="antorres/fedora-34-ipa-client",
     amount=1,
     threads=10,
+    ad_threads=0,
     replicas=0,
     results_format="json",
     results_output_file=None,

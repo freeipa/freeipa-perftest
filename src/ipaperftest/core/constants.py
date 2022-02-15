@@ -65,6 +65,7 @@ MACHINE_CONFIG_TEMPLATE = """
         {machine_name}.vm.box = "{box}"
         {machine_name}.vm.hostname = "{hostname}"
         {machine_name}.vm.network "private_network", libvirt__netmask: "255.255.0.0", ip: "{ip}"
+        {extra_options}
         {machine_name}.vm.provision "shell", inline: <<-SHELL
             {extra_commands}
         SHELL
@@ -83,6 +84,8 @@ ipaserver_realm={realm}
 ipaserver_setup_dns=yes
 ipaserver_auto_forwarders=yes
 ipaserver_auto_reverse=yes
+ipaserver_setup_adtrust=yes
+ipaserver_no_dnssec_validation=yes
 
 [ipareplicas]
 {replica_hostnames}
@@ -107,6 +110,18 @@ ipaadmin_password=password
 ipasssd_enable_dns_updates=yes
 ipaclient_no_nisdomain=yes
 ipaclient_no_ntp=yes
+
+[windows]
+{windows_ips}
+
+[windows:vars]
+ansible_connection=winrm
+ansible_port=5986
+ansible_user=Administrator
+ansible_password=vagrant
+ansible_winrm_server_cert_validation=ignore
+ansible_winrm_operation_timeout_sec=60
+ansible_winrm_read_timeout_sec=70
 """
 
 
@@ -271,10 +286,8 @@ ANSIBLE_AUTHENTICATIONTEST_SERVER_CONFIG_PLAYBOOK = """
     - command:
         cmd: "python create-test-data.py --hosts {amount} --outfile userdata.ldif --users-per-host {threads}"
         chdir: /root
-    - command: "kinit admin"
-      args:
-        stdin: "password"
     - ipaconfig:
+        ipaadmin_password: password
         enable_migration: yes
     - command:
         cmd: "ldapadd -x -D 'cn=Directory Manager' -w password -f userdata.ldif"
@@ -283,6 +296,7 @@ ANSIBLE_AUTHENTICATIONTEST_SERVER_CONFIG_PLAYBOOK = """
         cmd: "python set-password.py --dm-password password --hosts {amount} --users-per-host {threads}"
         chdir: /root
     - ipaconfig:
+        ipaadmin_password: password
         enable_migration: no
 """
 
@@ -300,13 +314,23 @@ ANSIBLE_AUTHENTICATIONTEST_CLIENT_CONFIG_PLAYBOOK = """
     - package:
         name: freeipa-perftest-client
         state: present
-    - lineinfile:
-        path: /etc/resolv.conf
-        regexp: ".*"
-        state: absent
-    - lineinfile:
-        path: /etc/resolv.conf
-        line: nameserver {server_ip}
+      retries: 5
+      delay: 3
+      register: result
+      until: result.rc == 0
+    - file:
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+    - copy:
+        dest: /etc/systemd/resolved.conf.d/dns.conf
+        content: |
+          [Resolve]
+          DNS={server_ip}
+          Domains=~.
+    - systemd:
+        name: systemd-resolved
+        state: restarted
+        daemon-reload: yes
     - lineinfile:
         path: /etc/hosts
         line: {server_ip} server.{domain} server
@@ -314,4 +338,94 @@ ANSIBLE_AUTHENTICATIONTEST_CLIENT_CONFIG_PLAYBOOK = """
         path: /etc/pam.d/login
         regexp: "\\\\.*pam_loginuid.so"
         state: absent
+"""
+
+ANSIBLE_AUTHENTICATIONTEST_AD_SERVER_CONFIG_PLAYBOOK = """
+---
+- name: Setup Active Directory
+  hosts: windows
+  tasks:
+    - win_firewall_rule:
+        name: Allow access from our network
+        direction: in
+        action: allow
+        enabled: yes
+        state: present
+    - win_feature:
+        name: '{{{{ item }}}}'
+        include_management_tools: yes
+        include_sub_features: yes
+        state: present
+      with_items:
+      - AD-Domain-Services
+      - DNS
+    - win_shell: |
+        Import-Module ADDSDeployment
+
+        Install-ADDSForest                                                        \\
+          -DomainName "ad.test"                                                   \\
+          -CreateDnsDelegation:$false                                             \\
+          -DomainNetbiosName "AD"                                                 \\
+          -ForestMode "WinThreshold"                                              \\
+          -DomainMode "WinThreshold"                                              \\
+          -Force:$true                                                            \\
+          -InstallDns:$true                                                       \\
+          -NoRebootOnCompletion:$true                                             \\
+          -SafeModeAdministratorPassword                                          \\
+            (ConvertTo-SecureString 'Secret123' -AsPlainText -Force)
+      register: installation
+      args:
+        creates: 'C:\\Windows\\NTDS'
+    - win_reboot:
+      when: installation.changed
+    - win_service:
+        name: adws
+        start_mode: auto
+        state: started
+"""
+
+ANSIBLE_AUTHENTICATIONTEST_AD_SERVER_ESTABLISH_TRUST_PLAYBOOK = """
+---
+- name: Setup DNS forwarder on AD DC
+  hosts: windows
+  tasks:
+  - win_command: "dnscmd 127.0.0.1 /ZoneAdd ipa.test /Forwarder {ipa_server_ip}"
+
+- name: Setup DNS forwarder on IPA server
+  hosts: ipaserver
+  become: true
+  tasks:
+  - ipadnsforwardzone:
+      ipaadmin_password: password
+      name: ad.test
+      forwarders:
+        - ip_address: {ad_server_ip}
+      forwardpolicy: only
+      state: present
+
+- name: Add trust with AD domain
+  hosts: ipaserver
+  become: true
+  tasks:
+  - ipatrust:
+      ipaadmin_password: password
+      realm: ad.test
+      admin: Administrator
+      password: vagrant
+      state: present
+"""
+
+ANSIBLE_AUTHENTICATIONTEST_AD_SERVER_CREATE_USERS_PLAYBOOK = """
+---
+- name: Create AD users
+  hosts: windows
+  tasks:
+  - win_shell: |
+      Set-ADDefaultDomainPasswordPolicy ad.test -ComplexityEnabled $False
+      for ($i = 0; $i -le {amount}; $i++) {{
+        $num = $i.ToString("000")
+        $name = "user{{0}}{{1}}" -f $num, "{client_hostname}"
+        $password = ConvertTo-SecureString -AsPlainText 'password' -Force
+        New-ADUser -SamAccountName $name -Name $name -AccountPassword $password -Enabled $True
+      }}
 """

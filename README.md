@@ -10,9 +10,13 @@ The controller must have the following software installed:
 * `vagrant`
 * `ansible`
 * `libvirt`
-* `vagrant-libvirt` (vagrant plugin)
 * `git`
 * `rsync`
+* Vagrant plugins
+   * `vagrant-libvirt`
+   * `winrm` (for AD support)
+   * `winrm-elevated` (for AD support)
+
 
 ## Usage
 

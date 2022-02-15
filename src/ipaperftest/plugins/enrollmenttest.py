@@ -33,6 +33,7 @@ class EnrollmentTest(Plugin):
                     memory_size=384,
                     cpus_number=1,
                     extra_commands="",
+                    extra_options="",
                     ip=next(self.ip_generator),
                 )
             )
