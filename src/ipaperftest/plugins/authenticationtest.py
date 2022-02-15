@@ -224,15 +224,23 @@ class AuthenticationTest(Plugin):
         )
 
         if total_percentage == 100:
+            msg = "success"
             yield Result(self, SUCCESS, msg="All threads succeded.")
         else:
+            msg = "fails"
             yield Result(self, ERROR,
                          error="Not all threads succeeded: %s/%s (%s)."
                          % (total_successes, total_threads, total_percentage))
 
-        self.results_archive_name = "AuthenticationTest-{}-{}-{}threads-{}fails".format(
+        amount = ctx.params["amount"]
+        threads = ctx.params["threads"]
+
+        self.results_archive_name = "AuthenticationTest-{}-{}-{}-{}-{}threads-{}{}".format(
             datetime.now().strftime("%FT%H%MZ"),
             ctx.params['server_image'].replace("/", ""),
+            amount,
+            threads,
             total_threads,
-            total_successes
+            total_successes,
+            msg
         )
