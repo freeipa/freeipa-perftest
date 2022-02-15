@@ -125,6 +125,8 @@ class Plugin:
         print("Destroying previous VMs...")
         if os.path.exists("Vagrantfile"):
             sp.run(["vagrant", "destroy", "-f"], stdout=sp.PIPE)
+            sp.run(["systemctl", "restart", "libvirtd"], stdout=sp.PIPE)
+            sp.run(["sleep", "5"], stdout=sp.PIPE)
 
     def reset_sync_folder(self, ctx):
         """Clear up any previously synced data and prepare for new data"""
