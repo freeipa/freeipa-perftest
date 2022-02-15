@@ -73,6 +73,7 @@ class Plugin:
         self.domain = "ipa.test"
         self.ip_generator = self.generate_ip()
         self.machine_configs = []
+        self.vagrant_additional_config = ""
         self.hosts = dict()
         self.custom_logs = []
 
@@ -177,6 +178,7 @@ class Plugin:
                 hostname="server." + self.domain.lower(),
                 memory_size=8192,
                 cpus_number=4,
+                extra_options="",
                 extra_commands="yum update -y && yum install sysstat -y",
                 ip=next(self.ip_generator),
             )
@@ -192,6 +194,7 @@ class Plugin:
                     hostname=name + "." + self.domain.lower(),
                     memory_size=8192,
                     cpus_number=4,
+                    extra_options="",
                     extra_commands="yum update -y && yum install sysstat -y",
                     ip=next(self.ip_generator),
                 )
@@ -203,7 +206,7 @@ class Plugin:
                 self.machine_configs.append(conf)
 
         # Related: https://github.com/hashicorp/vagrant/issues/4967
-        vagrant_additional_config = (
+        self.vagrant_additional_config += (
             "config.ssh.insert_key = false\n"
             'config.ssh.private_key_path = ["~/.vagrant.d/insecure_private_key", "%s"]'
             % ctx.params['private_key']
@@ -212,7 +215,7 @@ class Plugin:
         )
 
         file_contents = VAGRANTFILE_TEMPLATE.format(
-            vagrant_additional_config=vagrant_additional_config,
+            vagrant_additional_config=self.vagrant_additional_config,
             machine_configs="\n".join(self.machine_configs),
         )
         with open("Vagrantfile", "w") as f:
@@ -236,12 +239,12 @@ class Plugin:
             pair = line.replace("\n", "").replace("Host ", "").split("  HostName ")
             self.hosts[pair[0]] = pair[1]
 
-    def generate_ansibile_inventory(self, ctx):
+    def generate_ansible_inventory(self, ctx):
         # Each replica should have main server + all the other replicas
         # as servers so the topology is built correctly
         replica_lines = []
         for name, _ in self.hosts.items():
-            if name.startswith("client") or name.startswith("server"):
+            if not name.startswith("replica"):
                 continue
             servers = ["server." + self.domain]
             for other, _ in self.hosts.items():
@@ -256,6 +259,9 @@ class Plugin:
                 [name for name, _ in self.hosts.items() if name.startswith("client")]
             ),
             replica_hostnames="\n".join(replica_lines),
+            windows_ips="\n".join(
+                [ip for name, ip in self.hosts.items() if name.startswith("windows")]
+            )
         )
         with open("runner_metadata/inventory", "w") as f:
             f.write(inventory_str)
@@ -267,9 +273,12 @@ class Plugin:
     def ansible_ping(self, ctx):
         print("Sending ping to VMs...")
         ansible_runner.run(private_data_dir="runner_metadata",
-                           host_pattern="all",
+                           host_pattern="ipaserver,ipaclients,ipareplicas",
                            module="ping",
                            cmdline="--ssh-extra-args '-F vagrant-ssh-config'")
+        ansible_runner.run(private_data_dir="runner_metadata",
+                           host_pattern="windows",
+                           module="win_ping")
 
         if len(self.hosts.keys()) != len(self.machine_configs):
             yield Result(self, WARNING,
@@ -373,7 +382,7 @@ class Plugin:
             self.clone_ansible_freeipa,
             self.create_vms,
             self.collect_hosts,
-            self.generate_ansibile_inventory,
+            self.generate_ansible_inventory,
             self.generate_ssh_config,
             self.ansible_ping,
             self.configure_server,

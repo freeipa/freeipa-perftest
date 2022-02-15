@@ -33,6 +33,7 @@ class APITest(Plugin):
                     hostname=machine_name + "." + self.domain.lower(),
                     memory_size=2048,
                     cpus_number=1,
+                    extra_options="",
                     extra_commands="",
                     ip=next(self.ip_generator),
                 )
