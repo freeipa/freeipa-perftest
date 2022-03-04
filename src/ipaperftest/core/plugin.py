@@ -11,6 +11,7 @@ import ansible_runner
 from datetime import datetime
 
 from ipaperftest.core.constants import (
+    ANSIBLE_SERVER_ADD_REPO_PLAYBOOK,
     getLevelName,
     SUCCESS,
     WARNING,
@@ -278,6 +279,12 @@ class Plugin:
                          (len(self.hosts.keys(), len(self.machine_configs))))
 
     def configure_server(self, ctx):
+        if ctx.params["custom_repo_url"]:
+            args = {
+                "repo_url": ctx.params["custom_repo_url"]
+            }
+            self.run_ansible_playbook_from_template(ANSIBLE_SERVER_ADD_REPO_PLAYBOOK,
+                                                    "add_custom_repo", args, ctx)
         args = {
             "server_ip": self.hosts["server"],
             "domain": self.domain

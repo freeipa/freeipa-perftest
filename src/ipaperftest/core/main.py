@@ -137,6 +137,13 @@ class RunTest:
     "--results-output-file",
     help="File to write results output to",
 )
+@click.option(
+    "--custom-repo-url",
+    help="URL from custom repo to be configured on the server hosts. "
+         "Make sure N-V-R is higher than the packages available in the "
+         "server image so that your packages are used.",
+    default=""
+)
 @click.pass_context
 def main(
     ctx,
@@ -150,6 +157,7 @@ def main(
     replicas=0,
     results_format="json",
     results_output_file=None,
+    custom_repo_url=""
 ):
 
     tests = RunTest(['ipaperftest.registry'])
