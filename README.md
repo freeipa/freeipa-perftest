@@ -24,27 +24,25 @@ The controller must have the following software installed:
 Usage: ipaperftest [OPTIONS]
 
 Options:
-  --test TEXT               Test to execute.  [default: EnrollmentTest]
-  --client-image TEXT       Vagrant image to use for clients.  [default:
-                            antorres/fedora-34-ipa-client]
-
-  --server-image TEXT       Vagrant image to use for server.  [default:
-                            antorres/fedora-34-ipa-client]
-
-  --amount INTEGER          Size of the test.  [default: 1]
-  --replicas INTEGER RANGE  Number of replicas to create.  [default: 0]
-  --threads INTEGER         Threads to run per client during
-                            AuthenticationTest.  [default: 10]
-
-  --command TEXT            Command to execute during APITest.
-  --private-key TEXT        Private key needed to access VMs in case the
-                            Vagrant default is not enough.
-
+  --test TEXT                    Test to execute.  [default: EnrollmentTest]
+  --client-image TEXT            Vagrant image to use for clients.  [default:
+                                 antorres/fedora-34-ipa-client]
+  --server-image TEXT            Vagrant image to use for server.  [default:
+                                 antorres/fedora-34-ipa-client]
+  --amount INTEGER               Size of the test.  [default: 1]
+  --replicas INTEGER RANGE       Number of replicas to create.  [default:
+                                 0;0<=x<=2]
+  --threads INTEGER              Threads to run per client during
+                                 AuthenticationTest.  [default: 10]
+  --command TEXT                 Command to execute during APITest.
+  --private-key TEXT             Private key needed to access VMs in case the
+                                 Vagrant default is not enough.
   --results-format [json|human]  Format to use for results output  [default:
                                  json]
-
   --results-output-file TEXT     File to write results output to
-  --help                    Show this message and exit.  [default: False]
+  --custom-repo-url TEXT         URL from custom repo to be configured on the
+                                 server hosts  [default: ]
+  --help                         Show this message and exit.  [default: False]
 ```
 
 ## Capturing results

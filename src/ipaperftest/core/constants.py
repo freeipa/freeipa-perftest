@@ -168,6 +168,24 @@ ANSIBLE_FETCH_FILES_PLAYBOOK = """
 
 """
 
+ANSIBLE_SERVER_ADD_REPO_PLAYBOOK = """
+---
+- name: Add repo to server hosts
+  hosts: ipaserver, ipareplicas
+  become: yes
+  tasks:
+    - copy:
+        dest: /etc/yum.repos.d/freeipa-perftest-custom.repo
+        content: |
+          [freeipa-perftest-additional-repo]
+          name = Custom repo added by freeipa-perftest
+          baseurl = {repo_url}
+          enabled = 1
+          gpgcheck = 0
+          priority = 1
+          module_hotfixes = true
+"""
+
 ANSIBLE_SERVER_CONFIG_PLAYBOOK = """
 ---
 - name: Configure server before installation
