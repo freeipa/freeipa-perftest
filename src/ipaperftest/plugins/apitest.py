@@ -66,7 +66,8 @@ class APITest(Plugin):
         clients = [name for name, ip in self.hosts.items() if name.startswith("client")]
         local_run_time = (
             sp.run(
-                "vagrant ssh server -c 'date --date now+{}min +%H:%M'".format(
+                "vagrant ssh {} -c 'date --date now+{}min +%H:%M'".format(
+                    clients[0],
                     str(len(clients) * 2)
                 ),
                 shell=True,

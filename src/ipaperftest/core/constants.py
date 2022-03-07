@@ -109,7 +109,6 @@ ipaserver_realm={realm}
 ipaadmin_password=password
 ipasssd_enable_dns_updates=yes
 ipaclient_no_nisdomain=yes
-ipaclient_no_ntp=yes
 
 [windows]
 {windows_ips}
