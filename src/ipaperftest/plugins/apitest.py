@@ -20,6 +20,10 @@ from ipaperftest.plugins.registry import registry
 @registry
 class APITest(Plugin):
 
+    def __init__(self, registry):
+        super().__init__(registry)
+        self.custom_logs = ["command*log", ]
+
     def generate_clients(self, ctx):
         self.commands_per_client = 25
         n_clients = math.ceil(ctx.params['amount'] / self.commands_per_client)
