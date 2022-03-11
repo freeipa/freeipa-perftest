@@ -216,8 +216,6 @@ class AuthenticationTest(Plugin):
             total_threads += n_threads
 
         total_percentage = round((total_successes / total_threads) * 100)
-        yield Result(self, ERROR,
-                     error="None of the threads returned results.")
 
         print("{} threads out of {} succeeded ({}%)".format(
             total_successes, total_threads, total_percentage)
