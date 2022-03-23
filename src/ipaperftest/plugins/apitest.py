@@ -3,6 +3,7 @@
 #
 
 import math
+import os
 import subprocess as sp
 import time
 import ansible_runner
@@ -77,19 +78,30 @@ class APITest(Plugin):
             .strip()
         )
 
+        for client in clients:
+            sp.run("vagrant ssh {} -c 'echo password | kinit admin'".format(client),
+                   shell=True,
+                   stdin=sp.DEVNULL,
+                   stdout=sp.PIPE,
+                   stderr=sp.PIPE)
+
+        # commands[0] -> list of commands for client #1
+        commands = [[] for _ in clients]
         for i in range(ctx.params['amount']):
             client_idx = math.floor(i / self.commands_per_client)
-            formated_api_cmd = ctx.params['command'].format(id=str(i))
+            id_str = str(i).zfill(len(str(ctx.params['amount'])))
+            formated_api_cmd = ctx.params['command'].format(id=id_str)
             cmd = (
-                r"echo password | kinit admin;"
                 r"echo 'echo {cmd} > ~/command{id}log;"
                 r"{cmd} >> ~/command{id}log 2>&1;"
                 r"echo \$? >> ~/command{id}log' "
                 r"| at {time}".format(
                  cmd=formated_api_cmd, id=str(i), time=local_run_time)
             )
+            commands[client_idx].append(cmd)
+        for id, command_list in enumerate(commands):
             sp.run(
-                'vagrant ssh {} -c "{}"'.format(clients[client_idx], cmd),
+                'vagrant ssh {} -c "{}"'.format(clients[id], " && ".join(command_list)),
                 shell=True,
                 stdin=sp.DEVNULL,
                 stdout=sp.PIPE,
@@ -119,27 +131,23 @@ class APITest(Plugin):
                 break
             time.sleep(5)
 
+    def post_process_logs(self, ctx):
         commands_succeeded = 0
         returncodes = ""
-        for i in range(ctx.params['amount']):
-            client_idx = math.floor(i / self.commands_per_client)
-            file_lines = (
-                sp.run(
-                    "vagrant ssh {host} -c 'cat ~/command{id}log'".format(
-                        host=clients[client_idx], id=str(i)
-                    ),
-                    shell=True,
-                    stdout=sp.PIPE,
-                    stderr=sp.PIPE,
-                )
-                .stdout.decode("utf-8")
-                .splitlines()
-            )
-            rc_str = "Command '{}' returned {}".format(file_lines[0], file_lines[-1])
-            returncodes += rc_str + "\n"
-            print(rc_str)
-            if file_lines[-1] == "0":
-                commands_succeeded += 1
+
+        for f in os.listdir("sync"):
+            if f.startswith("client"):
+                for logfile in os.listdir("sync/%s" % f):
+                    if logfile.startswith("command"):
+                        cmd_lines = open("sync/{}/{}".format(f, logfile)).readlines()
+                        rc = cmd_lines[-1].strip()
+                        rc_str = "Command '{}' returned {} on {}".format(
+                            cmd_lines[0].strip(), rc, f
+                        )
+                        print(rc_str)
+                        returncodes += rc_str + "\n"
+                        if rc == "0":
+                            commands_succeeded += 1
         print("Return codes written to sync directory.")
         with open("sync/returncodes", "w") as f:
             f.write(returncodes)
