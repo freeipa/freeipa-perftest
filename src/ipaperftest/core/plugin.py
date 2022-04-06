@@ -13,10 +13,6 @@ from datetime import datetime
 from ipaperftest.core.constants import (
     ANSIBLE_SERVER_ADD_REPO_PLAYBOOK,
     getLevelName,
-    SUCCESS,
-    WARNING,
-    VAGRANTFILE_TEMPLATE,
-    MACHINE_CONFIG_TEMPLATE,
     HOSTS_FILE_TEMPLATE,
     ANSIBLE_CFG_TEMPLATE,
     ANSIBLE_SERVER_CONFIG_PLAYBOOK,
@@ -24,6 +20,8 @@ from ipaperftest.core.constants import (
     ANSIBLE_ENABLE_DATA_COLLECTION_PLAYBOOK,
     ANSIBLE_FETCH_FILES_PLAYBOOK,
 )
+from ipaperftest.providers.idmci import IdMCIProvider
+from ipaperftest.providers.vagrant import VagrantProvider
 
 
 class Registry:
@@ -72,25 +70,8 @@ class Plugin:
     def __init__(self, registry):
         self.registry = registry
         self.domain = "ipa.test"
-        self.ip_generator = self.generate_ip()
-        self.machine_configs = []
-        self.vagrant_additional_config = ""
-        self.hosts = dict()
         self.custom_logs = []
-
-    # IPs will be like 192.168.x.y
-    def generate_ip(self):
-        ip_x = 3
-        ip_y = 2
-
-        while True:
-            yield "192.168.{}.{}".format(ip_x, ip_y)
-            ip_y += 1
-            if ip_y == 255:
-                ip_y = 2
-                ip_x += 1
-                if ip_x == 256:
-                    yield Result(self, WARNING, msg="Ran out of IP addresses for private network")
+        self.provider = None
 
     def run_ansible_playbook_from_template(self, template, filename, playbook_args, ctx):
         """
@@ -108,27 +89,38 @@ class Plugin:
 
         ret = ansible_runner.run(private_data_dir="runner_metadata",
                                  playbook=filename + ".yml",
-                                 verbosity=1,
-                                 cmdline="--ssh-extra-args '-F vagrant-ssh-config' "
-                                         "--flush-cache")
+                                 verbosity=1)
 
         return ret
+
+    def run_ssh_command(self, command, target, ctx, wait=True):
+        """
+        SSH into the specified host target and run the command passed.
+        """
+
+        cmd = ("ssh -i '{}' -i '{}' root@{} "
+               "-o StrictHostKeyChecking=no "
+               "-o UserKnownHostsFile=/dev/null "
+               "\"{}\"").format(ctx.params["private_key"],
+                                self.provider.default_private_key, target, command)
+        func = sp.run if wait else sp.Popen
+
+        return func(cmd, shell=True, cwd="runner_metadata",
+                    stdout=sp.PIPE, stdin=sp.DEVNULL, stderr=sp.PIPE)
+
+    def select_provider(self, ctx):
+        selected_provider = ctx.params["provider"].lower()
+        if selected_provider == "vagrant":
+            self.provider = VagrantProvider()
+        elif selected_provider == "idmci":
+            self.provider = IdMCIProvider()
+        else:
+            raise RuntimeError("Selected provider '%s' does not exist." % selected_provider)
 
     def generate_clients(self, ctx):
         # A generator to yield client configurations which will be
         # appended to the list of machine configs.
         yield None
-
-    def cleanup(self, ctx):
-        """We clean up *before* an execution so that the VMs remain
-
-           This is so we can evaluate what, if anything, went wrong.
-        """
-        print("Destroying previous VMs...")
-        if os.path.exists("Vagrantfile"):
-            sp.run(["vagrant", "destroy", "-f"], stdout=sp.PIPE)
-            sp.run(["systemctl", "restart", "libvirtd"], stdout=sp.PIPE)
-            sp.run(["sleep", "5"], stdout=sp.PIPE)
 
     def reset_sync_folder(self, ctx):
         """Clear up any previously synced data and prepare for new data"""
@@ -139,13 +131,6 @@ class Plugin:
         """Clear up metadata from previous executions"""
         sp.run(["rm", "-rf", "runner_metadata"], stdout=sp.PIPE)
         sp.run(["mkdir", "runner_metadata"], stdout=sp.PIPE)
-
-    def validate_vagrantfile(self, ctx):
-        """Ensure we have a valid Vagrantfile before proceeding with testing"""
-        if sp.run(["vagrant", "validate"], stdout=sp.PIPE).returncode != 0:
-            raise RuntimeError("vagrant validate failed")
-        else:
-            yield Result(self, SUCCESS, msg="Vagrantfile generated and validated successfully.")
 
     def clone_ansible_freeipa(self, ctx):
         """ Clone ansible-freeipa upstream and create the Ansible config"""
@@ -162,130 +147,74 @@ class Plugin:
             stdout=sp.PIPE,
         )
         with open("runner_metadata/ansible.cfg", "w") as f:
-            f.write(ANSIBLE_CFG_TEMPLATE.format(cwd=os.path.join(os.getcwd(), "runner_metadata")))
-
-    def generate_vagrantfile(self, ctx):
-        """Create the Vagrantfile
-
-           This directly controls creating the entries for the server
-           and replicas. A per-test generator is used to generate the
-           client entries.
-        """
-        # Initial server
-        self.machine_configs = [
-            MACHINE_CONFIG_TEMPLATE.format(
-                machine_name="server",
-                box=ctx.params['server_image'],
-                hostname="server." + self.domain.lower(),
-                memory_size=8192,
-                cpus_number=4,
-                extra_options="",
-                extra_commands="yum update -y && yum install sysstat -y",
-                ip=next(self.ip_generator),
-            )
-        ]
-
-        # Replicas
-        for i in range(ctx.params['replicas']):
-            name = "replica{}".format(str(i))
-            self.machine_configs.append(
-                MACHINE_CONFIG_TEMPLATE.format(
-                    machine_name=name,
-                    box=ctx.params['server_image'],
-                    hostname=name + "." + self.domain.lower(),
-                    memory_size=8192,
-                    cpus_number=4,
-                    extra_options="",
-                    extra_commands="yum update -y && yum install sysstat -y",
-                    ip=next(self.ip_generator),
+            f.write(ANSIBLE_CFG_TEMPLATE.format(
+                cwd=os.path.join(os.getcwd(), "runner_metadata"),
+                private_key_path=ctx.params["private_key"],
+                default_private_key_path=self.provider.default_private_key
                 )
             )
 
-        # A plugin would here extend this list as needed
-        for conf in self.generate_clients(ctx):
-            if conf:
-                self.machine_configs.append(conf)
+    def generate_metadata(self, ctx):
 
-        # Related: https://github.com/hashicorp/vagrant/issues/4967
-        self.vagrant_additional_config += (
-            "config.ssh.insert_key = false\n"
-            'config.ssh.private_key_path = ["~/.vagrant.d/insecure_private_key", "%s"]'
-            % ctx.params['private_key']
-            if ctx.params.get('private_key')
-            else ""
-        )
+        machine_configs = [
+            {
+                "hostname": "server.%s" % self.domain.lower(),
+                "type": "server"
+            }
+        ]
 
-        file_contents = VAGRANTFILE_TEMPLATE.format(
-            vagrant_additional_config=self.vagrant_additional_config,
-            machine_configs="\n".join(self.machine_configs),
-        )
-        with open("Vagrantfile", "w") as f:
-            f.write(file_contents)
+        for i in range(ctx.params['replicas']):
+            name = "replica{}".format(str(i))
+            machine_configs.append(
+                {
+                    "hostname": "%s.%s" % (name, self.domain.lower()),
+                    "type": "server"
+                }
+            )
 
-    def create_vms(self, ctx):
-        """Bring up all the configured virtual machines"""
-        print("Creating VMs...")
-        sp.run(["vagrant", "up", "--parallel"])
+        for c in self.generate_clients(ctx):
+            machine_configs.append(c)
 
-    def collect_hosts(self, ctx):
-        """Collect IP information on the configured hosts in a dict
-
-           hostname:ip
-        """
-        grep_output = sp.run(
-            "vagrant ssh-config | grep -i HostName -B 1",
-            shell=True, stdout=sp.PIPE).stdout.decode("utf-8")
-        host_lines = grep_output.split("--")
-        for line in host_lines:
-            pair = line.replace("\n", "").replace("Host ", "").split("  HostName ")
-            self.hosts[pair[0]] = pair[1]
+        self.provider.generate_metadata(ctx, machine_configs, self.domain)
 
     def generate_ansible_inventory(self, ctx):
         # Each replica should have main server + all the other replicas
         # as servers so the topology is built correctly
         replica_lines = []
-        for name, _ in self.hosts.items():
+        for name, ip in self.provider.hosts.items():
             if not name.startswith("replica"):
                 continue
             servers = ["server." + self.domain]
-            for other, _ in self.hosts.items():
-                if other.startswith("replica") and other != name:
-                    servers.append(other + "." + self.domain)
-            replica_lines.append(name + " ipareplica_servers={}".format(",".join(servers)))
+            for other_name, other_ip in self.provider.hosts.items():
+                if other_name.startswith("replica") and other_name != name:
+                    servers.append(other_ip)
+            replica_lines.append(ip + " ipareplica_servers={}".format(",".join(servers)))
 
         inventory_str = HOSTS_FILE_TEMPLATE.format(
+            server_ip=self.provider.hosts["server"],
             domain=self.domain.lower(),
             realm=self.domain.upper(),
-            client_hostnames="\n".join(
-                [name for name, _ in self.hosts.items() if name.startswith("client")]
+            client_ips="\n".join(
+                [ip for name, ip in self.provider.hosts.items() if name.startswith("client")]
             ),
-            replica_hostnames="\n".join(replica_lines),
+            replica_ips="\n".join(replica_lines),
             windows_ips="\n".join(
-                [ip for name, ip in self.hosts.items() if name.startswith("windows")]
-            )
+                [ip for name, ip in self.provider.hosts.items() if name.startswith("windows")]
+            ),
+            windows_admin_password=self.provider.windows_admin_password
         )
         with open("runner_metadata/inventory", "w") as f:
             f.write(inventory_str)
-
-    def generate_ssh_config(self, ctx):
-        sp.run("vagrant ssh-config > runner_metadata/vagrant-ssh-config",
-               shell=True, stdout=sp.PIPE)
 
     def ansible_ping(self, ctx):
         print("Sending ping to VMs...")
         ansible_runner.run(private_data_dir="runner_metadata",
                            host_pattern="ipaserver,ipaclients,ipareplicas",
-                           module="ping",
-                           cmdline="--ssh-extra-args '-F vagrant-ssh-config'")
-        ansible_runner.run(private_data_dir="runner_metadata",
-                           host_pattern="windows",
-                           module="win_ping")
-
-        if len(self.hosts.keys()) != len(self.machine_configs):
-            yield Result(self, WARNING,
-                         msg="Number of hosts provisioned (%s) "
-                         "does not match requested amount (%s)" %
-                         (len(self.hosts.keys(), len(self.machine_configs))))
+                           module="ping")
+        if ctx.params["ad_threads"] > 0:
+            ansible_runner.run(private_data_dir="runner_metadata",
+                               host_pattern="windows",
+                               module="win_ping")
 
     def configure_server(self, ctx):
         if ctx.params["custom_repo_url"]:
@@ -295,19 +224,19 @@ class Plugin:
             self.run_ansible_playbook_from_template(ANSIBLE_SERVER_ADD_REPO_PLAYBOOK,
                                                     "add_custom_repo", args, ctx)
         args = {
-            "server_ip": self.hosts["server"],
+            "server_ip": self.provider.hosts["server"],
             "domain": self.domain
         }
         self.run_ansible_playbook_from_template(ANSIBLE_SERVER_CONFIG_PLAYBOOK,
                                                 "server_config", args, ctx)
 
     def configure_replicas(self, ctx):
-        for host, ip in self.hosts.items():
+        for host, ip in self.provider.hosts.items():
             if host.startswith("replica"):
                 args = {
                     "replica_name": host,
                     "replica_ip": str(ip),
-                    "server_ip": self.hosts["server"],
+                    "server_ip": self.provider.hosts["server"],
                     "domain": self.domain,
                 }
                 self.run_ansible_playbook_from_template(ANSIBLE_REPLICA_CONFIG_PLAYBOOK,
@@ -317,18 +246,14 @@ class Plugin:
         print("Installing IPA server...")
         ansible_runner.run(private_data_dir="runner_metadata",
                            playbook="ansible-freeipa/playbooks/install-server.yml",
-                           verbosity=1,
-                           cmdline="--ssh-extra-args '-F vagrant-ssh-config' "
-                                   "--flush-cache")
+                           verbosity=1)
 
     def install_replicas(self, ctx):
         if ctx.params['replicas'] > 0:
             print("Installing IPA replicas...")
             ansible_runner.run(private_data_dir="runner_metadata",
                                playbook="ansible-freeipa/playbooks/install-replica.yml",
-                               verbosity=1,
-                               cmdline="--ssh-extra-args '-F vagrant-ssh-config' "
-                                       "--flush-cache")
+                               verbosity=1)
 
     def enable_data_collection(self, ctx):
         print("Starting monitoring on server using SAR...")
@@ -345,7 +270,7 @@ class Plugin:
         time.sleep(60)
 
         print("Copying logs into sync folder...")
-        for host in self.hosts.keys():
+        for host in self.provider.hosts.keys():
             sp.run(["mkdir", "-p", f"sync/{host}"], stdout=sp.PIPE)
 
         logstr = '\n'.join(add_logs(self.custom_logs))
@@ -367,8 +292,8 @@ class Plugin:
             files_to_add = [
                 "sync/",
                 "runner_metadata",
-                "Vagrantfile"
             ]
+            files_to_add.extend(self.provider.files_to_log)
             for f in files_to_add:
                 tar.add(f)
 
@@ -379,18 +304,20 @@ class Plugin:
         pass
 
     def execute(self, ctx):
+        self.select_provider(ctx)
+
         funcs = [
             self.validate_options,
-            self.cleanup,
-            self.generate_vagrantfile,
+            self.provider.check_requirements,
+            self.provider.cleanup,
             self.reset_sync_folder,
             self.reset_metadata_folder,
-            self.validate_vagrantfile,
             self.clone_ansible_freeipa,
-            self.create_vms,
-            self.collect_hosts,
+            self.provider.setup,
+            self.generate_metadata,
+            self.provider.create_vms,
+            self.provider.collect_hosts,
             self.generate_ansible_inventory,
-            self.generate_ssh_config,
             self.ansible_ping,
             self.configure_server,
             self.configure_replicas,
@@ -400,7 +327,7 @@ class Plugin:
             self.run,
             self.collect_logs,
             self.post_process_logs,
-            self.archive_results
+            self.archive_results,
         ]
 
         for func in funcs:

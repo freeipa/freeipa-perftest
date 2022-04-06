@@ -107,13 +107,11 @@ class RunTest:
 @click.option("--test", default="EnrollmentTest", help="Test to execute.")
 @click.option(
     "--client-image",
-    default="antorres/fedora-34-ipa-client",
-    help="Vagrant image to use for clients.",
+    help="Image to use for clients.",
 )
 @click.option(
     "--server-image",
-    default="antorres/fedora-34-ipa-client",
-    help="Vagrant image to use for server.",
+    help="Image to use for server.",
 )
 @click.option("--amount", default=1, help="Size of the test.")
 @click.option(
@@ -126,10 +124,6 @@ class RunTest:
 @click.option("--ad-threads", default=0, help="Active Directory login threads "
                                               "to run per client during AuthenticationTest.")
 @click.option("--command", help="Command to execute during APITest.")
-@click.option(
-    "--private-key",
-    help="Private key needed to access VMs in case the Vagrant default is not enough.",
-)
 @click.option(
     "--results-format",
     help="Format to use for results output",
@@ -146,21 +140,31 @@ class RunTest:
          "server image so that your packages are used.",
     default=""
 )
+@click.option(
+    "--provider",
+    help="Provider to use during test execution",
+    type=click.Choice(["vagrant", "idmci"], case_sensitive=False), default="idmci"
+)
+@click.option(
+    "--private-key",
+    help="Private key needed to access VMs in case the default is not enough.",
+)
 @click.pass_context
 def main(
     ctx,
     test,
     command,
     private_key,
-    client_image="antorres/fedora-34-ipa-client",
-    server_image="antorres/fedora-34-ipa-client",
+    client_image,
+    server_image,
     amount=1,
     threads=10,
     ad_threads=0,
     replicas=0,
     results_format="json",
     results_output_file=None,
-    custom_repo_url=""
+    custom_repo_url="",
+    provider="idmci"
 ):
 
     tests = RunTest(['ipaperftest.registry'])

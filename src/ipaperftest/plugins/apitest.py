@@ -4,7 +4,6 @@
 
 import math
 import os
-import subprocess as sp
 import time
 import ansible_runner
 from datetime import datetime
@@ -13,7 +12,6 @@ from ipaperftest.core.plugin import Plugin, Result
 from ipaperftest.core.constants import (
     SUCCESS,
     ERROR,
-    MACHINE_CONFIG_TEMPLATE,
     ANSIBLE_APITEST_CLIENT_CONFIG_PLAYBOOK)
 from ipaperftest.plugins.registry import registry
 
@@ -32,16 +30,10 @@ class APITest(Plugin):
             idx = str(i).zfill(3)
             machine_name = "client{}".format(idx)
             yield(
-                MACHINE_CONFIG_TEMPLATE.format(
-                    machine_name=machine_name,
-                    box=ctx.params['client_image'],
-                    hostname=machine_name + "." + self.domain.lower(),
-                    memory_size=2048,
-                    cpus_number=1,
-                    extra_options="",
-                    extra_commands="",
-                    ip=next(self.ip_generator),
-                )
+                {
+                    "hostname": "%s.%s" % (machine_name, self.domain.lower()),
+                    "type": "client"
+                }
             )
 
     def validate_options(self, ctx):
@@ -52,39 +44,28 @@ class APITest(Plugin):
         print("Deploying clients...")
 
         args = {
-            "server_ip": self.hosts["server"],
+            "server_ip": self.provider.hosts["server"],
             "domain": self.domain
         }
         self.run_ansible_playbook_from_template(ANSIBLE_APITEST_CLIENT_CONFIG_PLAYBOOK,
                                                 "apitest_client_config", args, ctx)
         ansible_runner.run(private_data_dir="runner_metadata",
                            playbook="ansible-freeipa/playbooks/install-client.yml",
-                           verbosity=1,
-                           cmdline="--ssh-extra-args '-F vagrant-ssh-config' "
-                                   "--flush-cache")
+                           verbosity=1)
 
         # Wait 2 min per client before running the commands
-        clients = [name for name, ip in self.hosts.items() if name.startswith("client")]
+        clients = [name for name, ip in self.provider.hosts.items() if name.startswith("client")]
         local_run_time = (
-            sp.run(
-                "vagrant ssh {} -c 'date --date now+{}min +%H:%M'".format(
-                    clients[0],
-                    str(len(clients) * 2)
-                ),
-                shell=True,
-                stdout=sp.PIPE,
-                stderr=sp.PIPE,
-            )
+            self.run_ssh_command(
+                "date --date now+{}min +%H:%M"
+                .format(str(len(clients) * 2)),
+                self.provider.hosts[clients[0]], ctx)
             .stdout.decode("utf-8")
             .strip()
         )
 
         for client in clients:
-            sp.run("vagrant ssh {} -c 'echo password | kinit admin'".format(client),
-                   shell=True,
-                   stdin=sp.DEVNULL,
-                   stdout=sp.PIPE,
-                   stderr=sp.PIPE)
+            self.run_ssh_command("echo password | kinit admin", self.provider.hosts[client], ctx)
 
         # commands[0] -> list of commands for client #1
         commands = [[] for _ in clients]
@@ -101,13 +82,7 @@ class APITest(Plugin):
             )
             commands[client_idx].append(cmd)
         for id, command_list in enumerate(commands):
-            sp.run(
-                'vagrant ssh {} -c "{}"'.format(clients[id], " && ".join(command_list)),
-                shell=True,
-                stdin=sp.DEVNULL,
-                stdout=sp.PIPE,
-                stderr=sp.PIPE,
-            )
+            self.run_ssh_command(" && ".join(command_list), self.provider.hosts[clients[id]], ctx)
 
         print("Commands will be run at %s (machine local time)" % local_run_time)
         # Wait until all atd commands have completed
@@ -116,14 +91,8 @@ class APITest(Plugin):
             clients_cmds_pending = []
             for client in clients:
                 cmds_pending = (
-                    sp.run(
-                        "vagrant ssh {} -c 'sudo ls /var/spool/at | wc -l'".format(
-                            client
-                        ),
-                        shell=True,
-                        stdout=sp.PIPE,
-                        stderr=sp.PIPE,
-                    )
+                    self.run_ssh_command("sudo ls /var/spool/at | wc -l",
+                                         self.provider.hosts[client], ctx)
                     .stdout.decode("utf-8")
                     .strip()
                 )
@@ -162,7 +131,7 @@ class APITest(Plugin):
 
         self.results_archive_name = "APITest-{}-{}-{}commands-{}fails".format(
             datetime.now().strftime("%FT%H%MZ"),
-            ctx.params['server_image'].replace("/", ""),
+            self.provider.server_image.replace("/", ""),
             ctx.params['amount'],
             ctx.params['amount'] - commands_succeeded
         )

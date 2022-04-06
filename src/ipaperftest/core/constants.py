@@ -41,6 +41,33 @@ def getLevelName(level):
 
     return level
 
+IDMCI_METADATA_TEMPLATE = """
+domains:
+  - name: {domain}
+    type: IPA
+    hosts:
+    {hosts}
+
+phases:
+- name: init
+  steps:
+  - playbook: init/testrunner-dir.yaml
+- name: provision
+  steps:
+  - playbook: provision/mrack-up.yaml
+- name: prep
+  steps:
+  - playbook: prep/redhat-base.yaml
+- name: teardown
+  steps:
+  - playbook: teardown/mrack-destroy.yaml
+"""
+
+IDMCI_HOST_TEMPLATE = """
+    - name: {hostname}
+      group: {group}
+      os: {os}
+"""
 
 VAGRANTFILE_TEMPLATE = """
     Vagrant.configure("2") do |config|
@@ -56,25 +83,22 @@ VAGRANTFILE_TEMPLATE = """
     end
 """
 
-MACHINE_CONFIG_TEMPLATE = """
+VAGRANT_HOST_TEMPLATE = """
     config.vm.define :{machine_name} do |{machine_name}|
         {machine_name}.vm.provider "libvirt" do |v|
-            v.memory = {memory_size}
-            v.cpus = {cpus_number}
+            v.memory = {memory}
+            v.cpus = {cpus}
         end
         {machine_name}.vm.box = "{box}"
         {machine_name}.vm.hostname = "{hostname}"
         {machine_name}.vm.network "private_network", libvirt__netmask: "255.255.0.0", ip: "{ip}"
         {extra_options}
-        {machine_name}.vm.provision "shell", inline: <<-SHELL
-            {extra_commands}
-        SHELL
     end
 """
 
 HOSTS_FILE_TEMPLATE = """
 [ipaserver]
-server
+{server_ip}
 
 [ipaserver:vars]
 ipaadmin_password=password
@@ -88,7 +112,7 @@ ipaserver_setup_adtrust=yes
 ipaserver_no_dnssec_validation=yes
 
 [ipareplicas]
-{replica_hostnames}
+{replica_ips}
 
 [ipareplicas:vars]
 ipaadmin_password=password
@@ -100,7 +124,7 @@ ipareplica_auto_forwarders=yes
 ipareplica_auto_reverse=yes
 
 [ipaclients]
-{client_hostnames}
+{client_ips}
 
 [ipaclients:vars]
 ipaadmin_password=password
@@ -117,7 +141,7 @@ ipaclient_no_nisdomain=yes
 ansible_connection=winrm
 ansible_port=5986
 ansible_user=Administrator
-ansible_password=vagrant
+ansible_password={windows_admin_password}
 ansible_winrm_server_cert_validation=ignore
 ansible_winrm_operation_timeout_sec=60
 ansible_winrm_read_timeout_sec=70
@@ -126,10 +150,14 @@ ansible_winrm_read_timeout_sec=70
 
 ANSIBLE_CFG_TEMPLATE = """
 [defaults]
-deprecation_warnings=False
+remote_user = root
+host_key_checking = False
+deprecation_warnings = False
 roles_path   = {cwd}/ansible-freeipa/roles
 library      = {cwd}/ansible-freeipa/plugins/modules
 module_utils = {cwd}/ansible-freeipa/plugins/module_utils
+[ssh_connection]
+ssh_args = '-i "{private_key_path}" -i "{default_private_key_path}" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -C -o ControlMaster=auto -o ControlPersist=60s'
 """
 
 ANSIBLE_FETCH_FILES_PLAYBOOK = """
@@ -199,6 +227,8 @@ ANSIBLE_SERVER_CONFIG_PLAYBOOK = """
         path: /etc/hosts
         regexp: '127.*.*.*\\s*server'
         replace: '{server_ip} server.{domain} server/'
+    - package:
+        name: sysstat
 """
 
 ANSIBLE_REPLICA_CONFIG_PLAYBOOK = """
@@ -220,6 +250,8 @@ ANSIBLE_REPLICA_CONFIG_PLAYBOOK = """
     - lineinfile:
         path: /etc/hosts
         line: {replica_ip} {replica_name}.{domain} {replica_name}
+    - package:
+        name: sysstat
 """
 
 ANSIBLE_ENABLE_DATA_COLLECTION_PLAYBOOK = """
@@ -247,6 +279,8 @@ ANSIBLE_ENROLLMENTTEST_CLIENT_CONFIG_PLAYBOOK = """
     - lineinfile:
         path: /etc/hosts
         line: {server_ip} server.{domain} server
+    - package:
+        name: ipa-client
 """
 
 ANSIBLE_COUNT_IPA_HOSTS_PLAYBOOK = """
@@ -281,6 +315,12 @@ ANSIBLE_APITEST_CLIENT_CONFIG_PLAYBOOK = """
     - lineinfile:
         path: /etc/hosts
         line: {server_ip} server.{domain} server
+    - package:
+        name: at
+    - systemd:
+        name: atd
+        enabled: yes
+        state: started
 """
 
 ANSIBLE_AUTHENTICATIONTEST_SERVER_CONFIG_PLAYBOOK = """
@@ -297,11 +337,10 @@ ANSIBLE_AUTHENTICATIONTEST_SERVER_CONFIG_PLAYBOOK = """
       with_items:
         - create-test-data.py
         - set-password.py
-    - package:
-        name: python3-click
-        state: present
     - command:
-        cmd: "python create-test-data.py --hosts {amount} --outfile userdata.ldif --users-per-host {threads}"
+        cmd: "pip3 install click"
+    - command:
+        cmd: "python3 create-test-data.py --hosts {amount} --outfile userdata.ldif --users-per-host {threads}"
         chdir: /root
     - ipaconfig:
         ipaadmin_password: password
@@ -310,7 +349,7 @@ ANSIBLE_AUTHENTICATIONTEST_SERVER_CONFIG_PLAYBOOK = """
         cmd: "ldapadd -x -D 'cn=Directory Manager' -w password -f userdata.ldif"
         chdir: /root
     - command:
-        cmd: "python set-password.py --dm-password password --hosts {amount} --users-per-host {threads}"
+        cmd: "python3 set-password.py --dm-password password --hosts {amount} --users-per-host {threads}"
         chdir: /root
     - ipaconfig:
         ipaadmin_password: password
@@ -335,6 +374,8 @@ ANSIBLE_AUTHENTICATIONTEST_CLIENT_CONFIG_PLAYBOOK = """
       delay: 3
       register: result
       until: result.rc == 0
+    - package:
+        name: ipa-client
     - file:
         path: /etc/systemd/resolved.conf.d
         state: directory
@@ -428,7 +469,7 @@ ANSIBLE_AUTHENTICATIONTEST_AD_SERVER_ESTABLISH_TRUST_PLAYBOOK = """
       ipaadmin_password: password
       realm: ad.test
       admin: Administrator
-      password: vagrant
+      password: {windows_admin_password}
       state: present
 """
 

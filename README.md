@@ -4,19 +4,25 @@ Collection of performance and scalability-related testing scripts.
 
 ## Dependencies
 
-This tool uses Vagrant and Libvirt to deploy VMs for testing.
+This tool can use these providers to deploy VMs for testing:
+
+* Vagrant
+* IdM CI (uses Red Hat's internal infrastructure, needs authentication)
+
 The controller must have the following software installed:
 
-* `vagrant`
 * `ansible`
-* `libvirt`
 * `git`
 * `rsync`
+
+For using the Vagrant provider, these need to be installed as well:
+
+* `vagrant`
+* `libvirt`
 * Vagrant plugins
    * `vagrant-libvirt`
    * `winrm` (for AD support)
    * `winrm-elevated` (for AD support)
-
 
 ## Usage
 
@@ -25,23 +31,28 @@ Usage: ipaperftest [OPTIONS]
 
 Options:
   --test TEXT                    Test to execute.  [default: EnrollmentTest]
-  --client-image TEXT            Vagrant image to use for clients.  [default:
-                                 antorres/fedora-34-ipa-client]
-  --server-image TEXT            Vagrant image to use for server.  [default:
-                                 antorres/fedora-34-ipa-client]
+  --client-image TEXT            Image to use for clients.
+  --server-image TEXT            Image to use for server.
   --amount INTEGER               Size of the test.  [default: 1]
   --replicas INTEGER RANGE       Number of replicas to create.  [default:
                                  0;0<=x<=2]
   --threads INTEGER              Threads to run per client during
                                  AuthenticationTest.  [default: 10]
+  --ad-threads INTEGER           Active Directory login threads to run per
+                                 client during AuthenticationTest.  [default:
+                                 0]
   --command TEXT                 Command to execute during APITest.
-  --private-key TEXT             Private key needed to access VMs in case the
-                                 Vagrant default is not enough.
   --results-format [json|human]  Format to use for results output  [default:
                                  json]
   --results-output-file TEXT     File to write results output to
   --custom-repo-url TEXT         URL from custom repo to be configured on the
-                                 server hosts  [default: ]
+                                 server hosts. Make sure N-V-R is higher than
+                                 the packages available in the server image so
+                                 that your packages are used.  [default: ]
+  --provider [vagrant|idmci]     Provider to use during test execution
+                                 [default: idmci]
+  --private-key TEXT             Private key needed to access VMs in case the
+                                 default is not enough.
   --help                         Show this message and exit.  [default: False]
 ```
 
@@ -67,6 +78,12 @@ To use the environment:
 
 ```
 $ source venv/bin/activate
+```
+
+If you are using the IdM CI provider, the Ansible Vault password file needs to be set up:
+
+```
+$ echo 'IDMCI_VAULT_PASSWORD' > ~/.idmci-ansible-vault-password-file
 ```
 
 To run the tool:

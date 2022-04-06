@@ -1,6 +1,7 @@
+*.tar.gz
 Vagrantfile
+.vagrant/
 sync
-.vagrant
 runner_metadata/*
 *.pyc
 *.egg-info
@@ -22,4 +23,3 @@ src/depcomp
 src/install-sh
 src/missing
 src/stamp-h1
-

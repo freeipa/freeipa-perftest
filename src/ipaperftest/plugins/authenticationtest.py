@@ -13,7 +13,6 @@ from ipaperftest.core.constants import (
     SUCCESS,
     WARNING,
     ERROR,
-    MACHINE_CONFIG_TEMPLATE,
     ANSIBLE_AUTHENTICATIONTEST_SERVER_CONFIG_PLAYBOOK,
     ANSIBLE_AUTHENTICATIONTEST_CLIENT_CONFIG_PLAYBOOK,
     ANSIBLE_AUTHENTICATIONTEST_AD_SERVER_CONFIG_PLAYBOOK,
@@ -34,40 +33,20 @@ class AuthenticationTest(Plugin):
         if ctx.params["ad_threads"] > 0:
             machine_name = "windowsadserver"
             yield(
-                MACHINE_CONFIG_TEMPLATE.format(
-                    machine_name=machine_name,
-                    box="peru/windows-server-2019-standard-x64-eval",
-                    hostname=machine_name,
-                    memory_size=8192,
-                    cpus_number=4,
-                    ip=next(self.ip_generator),
-                    extra_commands="",
-                    extra_options="""
-                        {hostname}.vm.network :forwarded_port, guest: 3389, host:3389, id: "rdp", auto_correct:true
-                        {hostname}.vm.network :forwarded_port, guest: 5986, host:5986, id: "winrm-ssl", auto_correct:true
-                        {hostname}.vm.communicator = "winrm"
-                        {hostname}.winrm.communicator = "winrm"
-                        {hostname}.winrm.username = "Administrator"
-                        {hostname}.winrm.retry_limit = 50
-                        {hostname}.winrm.retry_delay = 10
-                    """.format(hostname=machine_name)  # noqa: E501
-                )
+                {
+                    "hostname": machine_name,
+                    "type": "ad"
+                }
             )
 
         for i in range(ctx.params['amount']):
             idx = str(i).zfill(3)
             machine_name = "client{}".format(idx)
             yield(
-                MACHINE_CONFIG_TEMPLATE.format(
-                    machine_name=machine_name,
-                    box=ctx.params['client_image'],
-                    hostname=machine_name + "." + self.domain.lower(),
-                    memory_size=768,
-                    cpus_number=1,
-                    extra_commands="",
-                    extra_options="",
-                    ip=next(self.ip_generator),
-                )
+                {
+                    "hostname": "%s.%s" % (machine_name, self.domain.lower()),
+                    "type": "client"
+                }
             )
 
     def validate_options(self, ctx):
@@ -104,15 +83,16 @@ class AuthenticationTest(Plugin):
         if ctx.params["ad_threads"] > 0:
             # Establish trust between servers
             args = {
-                "ipa_server_ip": self.hosts["server"],
-                "ad_server_ip": self.hosts["windowsadserver"]
+                "ipa_server_ip": self.provider.hosts["server"],
+                "ad_server_ip": self.provider.hosts["windowsadserver"],
+                "windows_admin_password": self.provider.windows_admin_password
             }
             self.run_ansible_playbook_from_template(
                 ANSIBLE_AUTHENTICATIONTEST_AD_SERVER_ESTABLISH_TRUST_PLAYBOOK,
                 "authenticationtest_establish_trust", args, ctx
             )
 
-            for host in self.hosts.keys():
+            for host in self.provider.hosts.keys():
                 if not host.startswith("client"):
                     continue
                 args = {
@@ -126,7 +106,7 @@ class AuthenticationTest(Plugin):
 
         # Configure clients before installation
         args = {
-            "server_ip": self.hosts["server"],
+            "server_ip": self.provider.hosts["server"],
             "domain": self.domain
         }
         self.run_ansible_playbook_from_template(
@@ -144,7 +124,7 @@ class AuthenticationTest(Plugin):
         windows_hosts = 0
         installed = 0
         sleep_time = 20
-        for host in self.hosts.keys():
+        for host, ip in self.provider.hosts.items():
             if not host.startswith("client"):
                 if host.startswith("server") or host.startswith("replica"):
                     non_client_hosts += 1
@@ -156,16 +136,7 @@ class AuthenticationTest(Plugin):
             if installed % 30 == 0:
                 sleep_time += 20
             cmds = ["sleep {}".format(sleep_time + random.randrange(1, 10))] + client_cmds
-            proc = sp.Popen(
-                'vagrant ssh {host} -c "{cmd}"'.format(
-                    host=host,
-                    cmd=" && ".join(cmds)
-                ),
-                shell=True,
-                stdout=sp.DEVNULL,
-                stdin=sp.DEVNULL,
-                stderr=sp.DEVNULL,
-            )
+            proc = self.run_ssh_command(" && ".join(cmds), ip, ctx, False)
             processes[host] = proc
 
         print("Waiting for client installs to be completed...")
@@ -189,13 +160,14 @@ class AuthenticationTest(Plugin):
             ANSIBLE_COUNT_IPA_HOSTS_PLAYBOOK,
             "enrollmenttest_count_hosts", {}, ctx
         )
-        host_find_output = ansible_ret.get_fact_cache("server")["host_find_output"]
+        server_ip = self.provider.hosts["server"]
+        host_find_output = ansible_ret.get_fact_cache(server_ip)["host_find_output"]
         try:
             if (
                 int(host_find_output) == (self.clients_succeeded + non_client_hosts)
-                and len(self.hosts.keys()) == (self.clients_succeeded +
-                                               non_client_hosts +
-                                               windows_hosts)
+                and len(self.provider.hosts.keys()) == (self.clients_succeeded +
+                                                        non_client_hosts +
+                                                        windows_hosts)
             ):
                 yield Result(self, SUCCESS, msg="All clients enrolled succesfully.")
             else:
@@ -208,15 +180,15 @@ class AuthenticationTest(Plugin):
                          error="Failed to convert host-find output to int. "
                                "Value was: %s" % host_find_output)
 
-        # Client authentications will be triggered at now + 1min per 30 clients
+        # Client authentications will be triggered at now + 1min per 20 clients
         client_auth_time = (
-            int(time.time()) + max(int(len(self.hosts.keys()) / 30), 1) * 60
+            int(time.time()) + max(int(len(self.provider.hosts.keys()) / 20), 1) * 60
         )
 
         # Now that all the client installs are done, fire off the
         # authentications (for now whether all installs are ok or not)
         processes = {}
-        for host in self.hosts.keys():
+        for host, ip in self.provider.hosts.items():
             if not host.startswith("client"):
                 continue
             installed += 1
@@ -230,16 +202,7 @@ class AuthenticationTest(Plugin):
                     str(ctx.params["ad_threads"])
                 ),
             ]
-            proc = sp.Popen(
-                'vagrant ssh {host} -c "{cmd}"'.format(
-                    host=host,
-                    cmd=" && ".join(cmds)
-                ),
-                shell=True,
-                stdout=sp.DEVNULL,
-                stdin=sp.DEVNULL,
-                stderr=sp.DEVNULL,
-            )
+            proc = self.run_ssh_command(" && ".join(cmds), ip, ctx, False)
             processes[host] = proc
 
         print("Waiting for client auth to be completed...")
@@ -304,7 +267,7 @@ class AuthenticationTest(Plugin):
 
         self.results_archive_name = "AuthenticationTest-{}-{}-{}threads-{}fails".format(
             datetime.now().strftime("%FT%H%MZ"),
-            ctx.params['server_image'].replace("/", ""),
+            self.provider.server_image.replace("/", ""),
             total_threads,
             total_threads - total_successes
         )
