@@ -1,5 +1,5 @@
 Name:           freeipa-perftest
-Version:        0.2
+Version:        0.3
 Release:        1%{?dist}
 Summary:        A set of IPA performance tools
 
@@ -82,6 +82,9 @@ popd
 
 
 %changelog
+* Tue Apr 26 2022 Antonio Torres <antorres@redhat.com> - 0.3-1
+- Update to 0.3 upstream release
+
 * Thu Dec 16 2021 Antonio Torres <antorres@redhat.com> - 0.2-1
 - Use Ansible playbooks for hosts configuration
 
