@@ -56,7 +56,7 @@ class VagrantProvider(Provider):
                 "cpus": 4,
             },
             "client": {
-                "memory": 1024,
+                "memory": 2048,
                 "cpus": 1,
             },
             "ad": {
