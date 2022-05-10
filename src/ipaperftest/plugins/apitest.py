@@ -54,14 +54,14 @@ class APITest(Plugin):
                            verbosity=1)
 
         # Wait 2 min per client before running the commands
-        clients = [name for name, ip in self.provider.hosts.items() if name.startswith("client")]
-        local_run_time = (
+        clients = [name for name, _ in self.provider.hosts.items() if name.startswith("client")]
+        local_run_time, epoch_run_time = (
             self.run_ssh_command(
-                "date --date now+{}min +%H:%M"
+                "date --date now+{}min '+%H:%M %s'"
                 .format(str(len(clients) * 2)),
                 self.provider.hosts[clients[0]], ctx)
             .stdout.decode("utf-8")
-            .strip()
+            .strip().split(" ")
         )
 
         for client in clients:
@@ -85,8 +85,12 @@ class APITest(Plugin):
             self.run_ssh_command(" && ".join(command_list), self.provider.hosts[clients[id]], ctx)
 
         print("Commands will be run at %s (machine local time)" % local_run_time)
+        sleep_time = int(epoch_run_time) - time.time()
+        time.sleep(sleep_time)
         # Wait until all atd commands have completed
         # (that is, once /var/spool/at only has the 'spool' dir)
+
+        start_time = time.time()
         while True:
             clients_cmds_pending = []
             for client in clients:
@@ -100,6 +104,8 @@ class APITest(Plugin):
             if all([cmds == "1" for cmds in clients_cmds_pending]):
                 break
             time.sleep(5)
+        end_time = time.time()
+        self.execution_time = end_time - start_time
 
     def post_process_logs(self, ctx):
         commands_succeeded = 0
@@ -129,9 +135,12 @@ class APITest(Plugin):
                          error="Not all commands completed succesfully (%s/%s). "
                          "Check logs." % (commands_succeeded, ctx.params['amount']))
 
-        self.results_archive_name = "APITest-{}-{}-{}commands-{}fails".format(
+        yield Result(self, SUCCESS, msg="Test executed in {} seconds.".format(self.execution_time))
+
+        self.results_archive_name = "APITest-{}-{}-{}commands-{}fails-{}s".format(
             datetime.now().strftime("%FT%H%MZ"),
             self.provider.server_image.replace("/", ""),
             ctx.params['amount'],
-            ctx.params['amount'] - commands_succeeded
+            ctx.params['amount'] - commands_succeeded,
+            int(self.execution_time)
         )
