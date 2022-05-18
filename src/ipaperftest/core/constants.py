@@ -504,3 +504,16 @@ ANSIBLE_AUTHENTICATIONTEST_AD_SERVER_CREATE_USERS_PLAYBOOK = """
         New-ADUser -SamAccountName $name -Name $name -AccountPassword $password -Enabled $True
       }}
 """
+
+ANSIBLE_AUTHENTICATIONTEST_NOSELINUX_CONFIG_PLAYBOOK = """
+---
+- name: Disable SELinux in SSSD
+  hosts: ipaclients
+  tasks:
+  - name: "Disable SELinux provider"
+    become: yes
+    lineinfile:
+      path: /etc/sssd/sssd.conf
+      line: selinux_provider = none
+      insertafter: id_provider = ipa
+"""
