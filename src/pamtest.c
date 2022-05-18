@@ -15,6 +15,8 @@
 #include <sys/utsname.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/wait.h>
+
 
 /* The only global, the name of the PAM service */
 char * pam_service = NULL;
@@ -109,6 +111,8 @@ int main(int argc, const char **argv)
     char **ad_usernames = NULL;
     int c, i;
     int ret = 0;
+    int dofork = 0;
+    int status = 0;
     struct utsname uinfo;
     poptContext pctx;
     struct poptOption popts[] = {
@@ -116,9 +120,11 @@ int main(int argc, const char **argv)
         {"service", 's', POPT_ARG_STRING, NULL, 's', NULL, "SERVICE"},
         {"threads", 't', POPT_ARG_INT, &threads, 0, NULL, NULL},
         {"ad-threads", 'a', POPT_ARG_INT, &ad_logins, 0, NULL, NULL},
+        {"fork", 'f', POPT_ARG_NONE, NULL, 'f', NULL, NULL},
         POPT_AUTOHELP
         POPT_TABLEEND
     };
+    pid_t pid;
 
     pctx = poptGetContext("thread", argc, argv, popts, 0);
     if (pctx == NULL) {
@@ -126,6 +132,9 @@ int main(int argc, const char **argv)
     }
     while ((c = poptGetNextOpt(pctx)) > 0) {
         switch (c) {
+        case 'f':
+            dofork = 1;
+            break;
         case 'o':
             logfile = poptGetOptArg(pctx);
             break;
@@ -200,7 +209,6 @@ int main(int argc, const char **argv)
 
     for (i = 0; i < ipa_logins; i++) {
         asprintf(&usernames[i], "user%d%s", i, uinfo.nodename);
-        index[i] = pthread_create(&ptr[i], NULL, (void *) call_pam, usernames[i]);
     }
 
     for (i = 0; i < ad_logins; i++) {
@@ -209,13 +217,38 @@ int main(int argc, const char **argv)
         char host[10];
         memcpy(host, uinfo.nodename, 9);
         asprintf(&ad_usernames[i], "user%03d%s@ad.test", i, host);
-        index[ipa_logins + i] = pthread_create(&ptr[ipa_logins + i], NULL, (void *) call_pam, ad_usernames[i]);
     }
 
-    for (i = 0; i < threads; i++) {
-        pthread_join(ptr[i], NULL);
-    }
+    if (dofork) {
+        for (i = 0; i < ipa_logins; i++) {
+            pid = fork();
+            switch(pid) {
+            case -1:  /* failure */
+                fprintf(stderr, "fork() error: %s\n", strerror(errno));
+                exit(1);
+                break;
+            case 0:  /* child */
+                call_pam(usernames[i]);
+                exit(0);
+                break;
+            default: /* parent */
+                break;
+            }
+        }
+        waitpid(-1, &status, 0);
+    } else {  // threads
+        for (i = 0; i < ipa_logins; i++) {
+            index[i] = pthread_create(&ptr[i], NULL, (void *) call_pam, usernames[i]);
+        }
 
+        for (i = 0; i < ad_logins; i++) {
+            index[ipa_logins + i] = pthread_create(&ptr[ipa_logins + i], NULL, (void *) call_pam, ad_usernames[i]);
+        }
+
+        for (i = 0; i < threads; i++) {
+            pthread_join(ptr[i], NULL);
+        }
+    }
     for (i = 0; i < ad_logins; i++) {
         free(ad_usernames[i]);
     }

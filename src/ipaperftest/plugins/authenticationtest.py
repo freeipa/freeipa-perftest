@@ -18,6 +18,7 @@ from ipaperftest.core.constants import (
     ANSIBLE_AUTHENTICATIONTEST_AD_SERVER_CONFIG_PLAYBOOK,
     ANSIBLE_AUTHENTICATIONTEST_AD_SERVER_ESTABLISH_TRUST_PLAYBOOK,
     ANSIBLE_AUTHENTICATIONTEST_AD_SERVER_CREATE_USERS_PLAYBOOK,
+    ANSIBLE_AUTHENTICATIONTEST_NOSELINUX_CONFIG_PLAYBOOK,
     ANSIBLE_COUNT_IPA_HOSTS_PLAYBOOK)
 from ipaperftest.plugins.registry import registry
 
@@ -180,6 +181,12 @@ class AuthenticationTest(Plugin):
                          error="Failed to convert host-find output to int. "
                                "Value was: %s" % host_find_output)
 
+        if ctx.params["disable_selinux"]:
+            self.run_ansible_playbook_from_template(
+                ANSIBLE_AUTHENTICATIONTEST_NOSELINUX_CONFIG_PLAYBOOK,
+                "authenticationtest_no_selinux", {}, ctx
+            )
+
         # Client authentications will be triggered at now + 1min per 20 clients
         client_auth_time = (
             int(time.time()) + max(int(len(self.provider.hosts.keys()) / 20), 1) * 60
@@ -197,7 +204,8 @@ class AuthenticationTest(Plugin):
                 sleep_time += 20
             cmds = [
                 "sleep $(( {} - $(date +%s) ))".format(str(client_auth_time)),
-                "sudo pamtest --threads {} --ad-threads {} -o pamtest.log".format(
+                "sudo pamtest {} --threads {} --ad-threads {} -o pamtest.log".format(
+                    '-f' if ctx.params["disable_selinux"] else '',
                     str(ctx.params["threads"]),
                     str(ctx.params["ad_threads"])
                 ),
