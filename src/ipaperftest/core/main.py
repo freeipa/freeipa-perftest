@@ -149,6 +149,11 @@ class RunTest:
     "--private-key",
     help="Private key needed to access VMs in case the default is not enough.",
 )
+@click.option(
+    "--sequential",
+    help="Run APITest commands sequentially from a single client.",
+    is_flag=True
+)
 @click.pass_context
 def main(
     ctx,
@@ -157,6 +162,7 @@ def main(
     private_key,
     client_image,
     server_image,
+    sequential,
     amount=1,
     threads=10,
     ad_threads=0,

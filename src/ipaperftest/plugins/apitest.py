@@ -24,8 +24,12 @@ class APITest(Plugin):
         self.custom_logs = ["command*log", ]
 
     def generate_clients(self, ctx):
-        self.commands_per_client = 25
-        n_clients = math.ceil(ctx.params['amount'] / self.commands_per_client)
+        if ctx.params['sequential']:
+            # We only need a single client for sequential mode
+            n_clients = 1
+        else:
+            self.commands_per_client = 25
+            n_clients = math.ceil(ctx.params['amount'] / self.commands_per_client)
         for i in range(n_clients):
             idx = str(i).zfill(3)
             machine_name = "client{}".format(idx)
@@ -40,19 +44,7 @@ class APITest(Plugin):
         if not ctx.params.get('command'):
             raise RuntimeError('command is required')
 
-    def run(self, ctx):
-        print("Deploying clients...")
-
-        args = {
-            "server_ip": self.provider.hosts["server"],
-            "domain": self.domain
-        }
-        self.run_ansible_playbook_from_template(ANSIBLE_APITEST_CLIENT_CONFIG_PLAYBOOK,
-                                                "apitest_client_config", args, ctx)
-        ansible_runner.run(private_data_dir="runner_metadata",
-                           playbook="ansible-freeipa/playbooks/install-client.yml",
-                           verbosity=1)
-
+    def run_simultaneously(self, ctx):
         # Wait 2 min per client before running the commands
         clients = [name for name, _ in self.provider.hosts.items() if name.startswith("client")]
         local_run_time, epoch_run_time = (
@@ -63,9 +55,6 @@ class APITest(Plugin):
             .stdout.decode("utf-8")
             .strip().split(" ")
         )
-
-        for client in clients:
-            self.run_ssh_command("echo password | kinit admin", self.provider.hosts[client], ctx)
 
         # commands[0] -> list of commands for client #1
         commands = [[] for _ in clients]
@@ -107,6 +96,47 @@ class APITest(Plugin):
         end_time = time.time()
         self.execution_time = end_time - start_time
 
+    def run_sequentially(self, ctx):
+        commands = []
+        for i in range(ctx.params['amount']):
+            id_str = str(i).zfill(len(str(ctx.params['amount'])))
+            formated_api_cmd = ctx.params["command"].format(id=id_str)
+            cmd = (
+                r"echo {cmd} > ~/command{id}log;"
+                r"{cmd} >> ~/command{id}log 2>&1;"
+                r"echo \$? >> ~/command{id}log".format(
+                    cmd=formated_api_cmd, id=str(i)
+                )
+            )
+            commands.append(cmd)
+
+        start_time = time.time()
+        self.run_ssh_command(" && ".join(commands), self.provider.hosts["client000"], ctx)
+        end_time = time.time()
+        self.execution_time = end_time - start_time
+
+    def run(self, ctx):
+        print("Deploying clients...")
+
+        args = {
+            "server_ip": self.provider.hosts["server"],
+            "domain": self.domain
+        }
+        self.run_ansible_playbook_from_template(ANSIBLE_APITEST_CLIENT_CONFIG_PLAYBOOK,
+                                                "apitest_client_config", args, ctx)
+        ansible_runner.run(private_data_dir="runner_metadata",
+                           playbook="ansible-freeipa/playbooks/install-client.yml",
+                           verbosity=1)
+
+        clients = [name for name, _ in self.provider.hosts.items() if name.startswith("client")]
+        for client in clients:
+            self.run_ssh_command("echo password | kinit admin", self.provider.hosts[client], ctx)
+
+        if ctx.params["sequential"]:
+            self.run_sequentially(ctx)
+        else:
+            self.run_simultaneously(ctx)
+
     def post_process_logs(self, ctx):
         commands_succeeded = 0
         returncodes = ""
@@ -137,7 +167,8 @@ class APITest(Plugin):
 
         yield Result(self, SUCCESS, msg="Test executed in {} seconds.".format(self.execution_time))
 
-        self.results_archive_name = "APITest-{}-{}-{}commands-{}fails-{}s".format(
+        self.results_archive_name = "APITest-{}-{}-{}-{}commands-{}fails-{}s".format(
+            "sequential" if ctx.params["sequential"] else "simultaneous",
             datetime.now().strftime("%FT%H%MZ"),
             self.provider.server_image.replace("/", ""),
             ctx.params['amount'],
