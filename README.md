@@ -34,8 +34,8 @@ Options:
   --client-image TEXT            Image to use for clients.
   --server-image TEXT            Image to use for server.
   --amount INTEGER               Size of the test.  [default: 1]
-  --replicas INTEGER RANGE       Number of replicas to create.  [default:
-                                 0;0<=x<=2]
+  --replicas INTEGER RANGE       Number of replicas to create.  [default: 0;
+                                 0<=x<=2]
   --threads INTEGER              Threads to run per client during
                                  AuthenticationTest.  [default: 10]
   --ad-threads INTEGER           Active Directory login threads to run per
@@ -48,11 +48,13 @@ Options:
   --custom-repo-url TEXT         URL from custom repo to be configured on the
                                  server hosts. Make sure N-V-R is higher than
                                  the packages available in the server image so
-                                 that your packages are used.  [default: ]
+                                 that your packages are used.
   --provider [vagrant|idmci]     Provider to use during test execution
                                  [default: idmci]
   --private-key TEXT             Private key needed to access VMs in case the
                                  default is not enough.
+  --sequential                   Run APITest commands sequentially from a
+                                 single client.  [default: False]
   --help                         Show this message and exit.  [default: False]
 ```
 
@@ -132,7 +134,10 @@ This tests runs the same command n times simultaneously. The command is specifie
 wildcard `{id}` is permitted for commands that required variability to run properly (for example, it can be used
 as a username so that the `user-add` command can be run multiple times without failing). The amount of commands to
 run is set using the `amount` options, and these commands will be run from clients deployed before the test. Each
-client deployed will run a maximum of 50 commands. These commands are scheduled on the client using the `at` tool.
+client deployed will run a maximum of 25 commands. These commands are scheduled on the client using the `at` tool.
+
+There is an option to run the test in sequential mode. When this mode is activated, only one client will be deployed,
+and commands will be executed sequentially from this single client.
 
 After the execution of the test, output from the commands will be written to the `sync` directory.
 
