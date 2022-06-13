@@ -10,6 +10,7 @@ from datetime import datetime
 
 from ipaperftest.core.plugin import Plugin, Result
 from ipaperftest.core.constants import (
+    ANSIBLE_APITEST_CLIENT_UPLOAD_SEQUENTIAL_SCRIPT_PLAYBOOK,
     SUCCESS,
     ERROR,
     ANSIBLE_APITEST_CLIENT_CONFIG_PLAYBOOK)
@@ -104,14 +105,24 @@ class APITest(Plugin):
             cmd = (
                 r"echo {cmd} > ~/command{id}log;"
                 r"{cmd} >> ~/command{id}log 2>&1;"
-                r"echo \$? >> ~/command{id}log".format(
+                r"echo $? >> ~/command{id}log".format(
                     cmd=formated_api_cmd, id=str(i)
                 )
             )
             commands.append(cmd)
 
+        with open("runner_metadata/apitest_sequential_commands.sh", "w") as f:
+            f.write("#!/bin/sh\n")
+            for cmd in commands:
+                f.write(cmd + "\n")
+
+        self.run_ansible_playbook_from_template(
+            ANSIBLE_APITEST_CLIENT_UPLOAD_SEQUENTIAL_SCRIPT_PLAYBOOK,
+            "apitest_sequential_script_upload", {}, ctx)
+
         start_time = time.time()
-        self.run_ssh_command(" && ".join(commands), self.provider.hosts["client000"], ctx)
+        self.run_ssh_command("/bin/sh apitest_sequential_commands.sh",
+                             self.provider.hosts["client000"], ctx)
         end_time = time.time()
         self.execution_time = end_time - start_time
 

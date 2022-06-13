@@ -323,6 +323,21 @@ ANSIBLE_APITEST_CLIENT_CONFIG_PLAYBOOK = """
         state: started
 """
 
+ANSIBLE_APITEST_CLIENT_UPLOAD_SEQUENTIAL_SCRIPT_PLAYBOOK = """
+---
+- name: Upload script with commands to execute sequentially
+  hosts: ipaclients
+  become: yes
+  tasks:
+    - synchronize:
+        src: "{{{{ item }}}}"
+        dest: "/root"
+        mode: push
+        use_ssh_args: yes
+      with_items:
+        - apitest_sequential_commands.sh
+"""
+
 ANSIBLE_AUTHENTICATIONTEST_SERVER_CONFIG_PLAYBOOK = """
 ---
 - name: Configure server before execution
