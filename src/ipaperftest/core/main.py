@@ -154,6 +154,11 @@ class RunTest:
     help="Run APITest commands sequentially from a single client.",
     is_flag=True
 )
+@click.option(
+    "--idmci-lifetime",
+    help="Lifetime in hours of IdM-CI hosts.",
+    default=8,
+)
 @click.pass_context
 def main(
     ctx,
@@ -170,7 +175,8 @@ def main(
     results_format="json",
     results_output_file=None,
     custom_repo_url="",
-    provider="idmci"
+    provider="idmci",
+    idmci_lifetime=8,
 ):
 
     tests = RunTest(['ipaperftest.registry'])

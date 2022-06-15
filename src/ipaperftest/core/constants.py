@@ -54,7 +54,9 @@ phases:
   - playbook: init/testrunner-dir.yaml
 - name: provision
   steps:
-  - playbook: provision/mrack-up.yaml
+  - extra_vars:
+      lifetime: {lifetime}
+    playbook: provision/mrack-up.yaml
 - name: prep
   steps:
   - playbook: prep/redhat-base.yaml
