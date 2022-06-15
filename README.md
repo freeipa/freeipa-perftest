@@ -54,8 +54,10 @@ Options:
   --private-key TEXT             Private key needed to access VMs in case the
                                  default is not enough.
   --sequential                   Run APITest commands sequentially from a
-                                 single client.  [default: False]
-  --help                         Show this message and exit.  [default: False]
+                                 single client.
+  --idmci-lifetime INTEGER       Lifetime in hours of IdM-CI hosts.  [default:
+                                 8]
+  --help                         Show this message and exit.
 ```
 
 ## Capturing results

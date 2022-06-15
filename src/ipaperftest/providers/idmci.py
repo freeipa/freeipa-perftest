@@ -80,7 +80,8 @@ class IdMCIProvider(Provider):
 
         file_contents = IDMCI_METADATA_TEMPLATE.format(
             domain=domain.lower(),
-            hosts=hosts_metadata
+            hosts=hosts_metadata,
+            lifetime=ctx.params['idmci_lifetime']
         )
         with open("runner_metadata/metadata.yaml", "w") as f:
             f.write(file_contents)
