@@ -1,5 +1,5 @@
 Name:           freeipa-perftest
-Version:        0.3
+Version:        0.4
 Release:        1%{?dist}
 Summary:        A set of IPA performance tools
 
@@ -82,6 +82,9 @@ popd
 
 
 %changelog
+* Wed Aug 24 2022 Antonio Torres <antorres@redhat.com> - 0.4-1
+- Update to 0.4 upstream release
+
 * Tue Apr 26 2022 Antonio Torres <antorres@redhat.com> - 0.3-1
 - Update to 0.3 upstream release
 
