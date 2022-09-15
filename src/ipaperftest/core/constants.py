@@ -354,6 +354,8 @@ ANSIBLE_AUTHENTICATIONTEST_SERVER_CONFIG_PLAYBOOK = """
       with_items:
         - create-test-data.py
         - set-password.py
+    - package:
+        name: python3-pip
     - command:
         cmd: "pip3 install click"
     - command:
