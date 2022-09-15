@@ -235,6 +235,21 @@ int main(int argc, const char **argv)
                 break;
             }
         }
+        for (i = 0; i < ad_logins; i++) {
+            pid = fork();
+            switch(pid) {
+            case -1:  /* failure */
+                fprintf(stderr, "fork() error: %s\n", strerror(errno));
+                exit(1);
+                break;
+            case 0:  /* child */
+                call_pam(ad_usernames[i]);
+                exit(0);
+                break;
+            default: /* parent */
+                break;
+            }
+        }
         waitpid(-1, &status, 0);
     } else {  // threads
         for (i = 0; i < ipa_logins; i++) {
