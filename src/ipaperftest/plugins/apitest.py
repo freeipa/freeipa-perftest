@@ -34,7 +34,7 @@ class APITest(Plugin):
         for i in range(n_clients):
             idx = str(i).zfill(3)
             machine_name = "client{}".format(idx)
-            yield(
+            yield (
                 {
                     "hostname": "%s.%s" % (machine_name, self.domain.lower()),
                     "type": "client"

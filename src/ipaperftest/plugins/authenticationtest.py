@@ -33,7 +33,7 @@ class AuthenticationTest(Plugin):
     def generate_clients(self, ctx):
         if ctx.params["ad_threads"] > 0:
             machine_name = "windowsadserver"
-            yield(
+            yield (
                 {
                     "hostname": machine_name,
                     "type": "ad"
@@ -43,7 +43,7 @@ class AuthenticationTest(Plugin):
         for i in range(ctx.params['amount']):
             idx = str(i).zfill(3)
             machine_name = "client{}".format(idx)
-            yield(
+            yield (
                 {
                     "hostname": "%s.%s" % (machine_name, self.domain.lower()),
                     "type": "client"

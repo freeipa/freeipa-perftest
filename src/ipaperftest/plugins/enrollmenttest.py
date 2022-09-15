@@ -27,7 +27,7 @@ class EnrollmentTest(Plugin):
         for i in range(ctx.params['amount']):
             idx = str(i).zfill(3)
             machine_name = "client{}".format(idx)
-            yield(
+            yield (
                 {
                     "hostname": "%s.%s" % (machine_name, self.domain.lower()),
                     "type": "client"
