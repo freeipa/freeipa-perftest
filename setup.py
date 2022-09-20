@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='ipaperftest',
-    version='0.4',
+    version='0.4.1',
     namespace_packages=['ipaperftest', ],
     package_dir={'': 'src'},
     packages=[

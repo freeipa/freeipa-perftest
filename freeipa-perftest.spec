@@ -1,6 +1,6 @@
 Name:           freeipa-perftest
-Version:        0.4
-Release:        2%{?dist}
+Version:        0.4.1
+Release:        1%{?dist}
 Summary:        A set of IPA performance tools
 
 License:        GPLv3
@@ -82,6 +82,9 @@ popd
 
 
 %changelog
+* Tue Sep 20 2022 Antonio Torres <antorres@redhat.com> - 0.4.1-1
+- Update to 0.4.1 upstream release
+
 * Thu Sep 15 2022 Antonio Torres <antorres@redhat.com> - 0.4-2
 - Fix pamtest not being able to run AD auths when using forks
 

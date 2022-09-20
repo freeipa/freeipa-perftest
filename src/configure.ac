@@ -1,5 +1,5 @@
 # Required initializer
-AC_INIT([freeipa-perftest],[0.1])
+AC_INIT([freeipa-perftest],[0.4.1])
 
 # Automake initialization
 AM_INIT_AUTOMAKE([foreign])
