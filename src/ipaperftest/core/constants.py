@@ -242,9 +242,19 @@ ANSIBLE_REPLICA_CONFIG_PLAYBOOK = """
     - lineinfile:
         path: /etc/hosts
         line: '{server_ip} server.{domain} server'
-    - lineinfile:
-        path: /etc/resolv.conf
-        line: nameserver {server_ip}
+    - file:
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+    - copy:
+        dest: /etc/systemd/resolved.conf.d/dns.conf
+        content: |
+          [Resolve]
+          DNS={server_ip}
+          Domains=~.
+    - systemd:
+        name: systemd-resolved
+        state: restarted
+        daemon-reload: yes
     - lineinfile:
         path: /etc/hosts
         regexp: '127.*.*.*\\s*replica*'
@@ -271,6 +281,19 @@ ANSIBLE_ENROLLMENTTEST_CLIENT_CONFIG_PLAYBOOK = """
   hosts: ipaclients
   become: yes
   tasks:
+    - file:
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+    - copy:
+        dest: /etc/systemd/resolved.conf.d/dns.conf
+        content: |
+          [Resolve]
+          DNS={server_ip}
+          Domains=~.
+    - systemd:
+        name: systemd-resolved
+        state: restarted
+        daemon-reload: yes
     - lineinfile:
         path: /etc/resolv.conf
         regexp: ".*"
@@ -307,6 +330,19 @@ ANSIBLE_APITEST_CLIENT_CONFIG_PLAYBOOK = """
   hosts: ipaclients
   become: yes
   tasks:
+    - file:
+        path: /etc/systemd/resolved.conf.d
+        state: directory
+    - copy:
+        dest: /etc/systemd/resolved.conf.d/dns.conf
+        content: |
+          [Resolve]
+          DNS={server_ip}
+          Domains=~.
+    - systemd:
+        name: systemd-resolved
+        state: restarted
+        daemon-reload: yes
     - lineinfile:
         path: /etc/resolv.conf
         regexp: ".*"
@@ -408,6 +444,13 @@ ANSIBLE_AUTHENTICATIONTEST_CLIENT_CONFIG_PLAYBOOK = """
         name: systemd-resolved
         state: restarted
         daemon-reload: yes
+    - lineinfile:
+        path: /etc/resolv.conf
+        regexp: ".*"
+        state: absent
+    - lineinfile:
+        path: /etc/resolv.conf
+        line: nameserver {server_ip}
     - lineinfile:
         path: /etc/hosts
         line: {server_ip} server.{domain} server
