@@ -200,10 +200,11 @@ class AuthenticationTest(Plugin):
                 continue
             installed += 1
             # spread the pamtest execution
-            if installed % 30 == 0:
-                sleep_time += 20
+            spread = 0
+            if ctx.params["auth_spread"] > 0:
+                spread = random.randrange(0, int(ctx.params['auth_spread']))
             cmds = [
-                "sleep $(( {} - $(date +%s) ))".format(str(client_auth_time)),
+                "sleep $(( {} - $(date +%s) ))".format(str(client_auth_time + spread)),
                 "sudo pamtest {} --threads {} --ad-threads {} -o pamtest.log".format(
                     '-f' if ctx.params["disable_selinux"] else '',
                     str(ctx.params["threads"]),

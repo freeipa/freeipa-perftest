@@ -161,6 +161,11 @@ class RunTest:
     help="Lifetime in hours of IdM-CI hosts.",
     default=8,
 )
+@click.option(
+    "--auth-spread",
+    help="Time range in seconds to spread auths in AuthenticationTest",
+    default=0,
+)
 @click.pass_context
 def main(
     ctx,
@@ -180,6 +185,7 @@ def main(
     custom_repo_url="",
     provider="idmci",
     idmci_lifetime=8,
+    auth_spread=0,
 ):
 
     tests = RunTest(['ipaperftest.registry'])
