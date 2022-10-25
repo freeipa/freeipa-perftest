@@ -104,5 +104,7 @@ class IdMCIProvider(Provider):
         # active fedora-34 41df92f5-5f47-426a-9267-47758d6b9098 fedora34.idmci.test 10.0.199.6 None None  # noqa: E501
         for line in mrack_output.splitlines():
             info = line.split(" ")
+            if info[0] != "active":
+                continue
             name = info[3].split(".")[0]  # don't include full domain
             self.hosts[name] = info[4]
