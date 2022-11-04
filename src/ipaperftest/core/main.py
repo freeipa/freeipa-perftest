@@ -117,7 +117,7 @@ class RunTest:
 @click.option(
     "--replicas",
     default=0,
-    type=click.IntRange(0, 2),
+    type=click.IntRange(0, 64),
     help="Number of replicas to create.",
 )
 @click.option("--threads", default=10, help="Threads to run per client during AuthenticationTest.")
