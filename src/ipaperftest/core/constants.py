@@ -113,8 +113,7 @@ ipaserver_auto_reverse=yes
 ipaserver_setup_adtrust=yes
 ipaserver_no_dnssec_validation=yes
 
-[ipareplicas]
-{replica_ips}
+{replica_lines}
 
 [ipareplicas:vars]
 ipaadmin_password=password
@@ -122,6 +121,7 @@ ipadm_password=password
 ipareplica_domain={domain}
 ipaserver_realm={realm}
 ipareplica_setup_dns=yes
+ipareplica_setup_ca=yes
 ipareplica_auto_forwarders=yes
 ipareplica_auto_reverse=yes
 
@@ -165,8 +165,9 @@ ssh_args = '-i "{private_key_path}" -i "{default_private_key_path}" -o StrictHos
 ANSIBLE_FETCH_FILES_PLAYBOOK = """
 ---
 - name: Fetch IPA server log files
-  hosts: ipaserver, ipareplicas
+  hosts: ipaserver, ipareplicas*
   become: yes
+  ignore_errors: yes
   tasks:
     - synchronize:
         src: "{{{{ item }}}}"
@@ -176,6 +177,7 @@ ANSIBLE_FETCH_FILES_PLAYBOOK = """
       with_items:
         - "/var/log/ipaserver-install.log"
         - "/var/log/ipaclient-install.log"
+        - "/var/log/ipareplica-install.log"
         - "/var/log/httpd"
         - "/var/log/dirsrv"
         - "/var/log/krb5kdc.log"
@@ -185,6 +187,7 @@ ANSIBLE_FETCH_FILES_PLAYBOOK = """
 - name: Fetch IPA clients log files
   hosts: ipaclients
   become: yes
+  ignore_errors: yes
   tasks:
     - synchronize:
         src: "{{{{ item }}}}"
@@ -200,7 +203,7 @@ ANSIBLE_FETCH_FILES_PLAYBOOK = """
 ANSIBLE_SERVER_ADD_REPO_PLAYBOOK = """
 ---
 - name: Add repo to server hosts
-  hosts: ipaserver, ipareplicas
+  hosts: ipaserver, ipareplicas*
   become: yes
   tasks:
     - copy:
@@ -218,48 +221,71 @@ ANSIBLE_SERVER_ADD_REPO_PLAYBOOK = """
 ANSIBLE_SERVER_CONFIG_PLAYBOOK = """
 ---
 - name: Configure server before installation
-  hosts: ipaserver
+  hosts: ipaserver, ipareplicas*
   become: yes
   tasks:
     - sysctl:
         name: net.ipv6.conf.all.disable_ipv6
         value: '0'
         sysctl_set: yes
-    - replace:
+    - blockinfile:
         path: /etc/hosts
-        regexp: '127.*.*.*\\s*server'
-        replace: '{server_ip} server.{domain} server/'
+        block: |
+          {etchosts}
     - package:
         name: sysstat
 """
 
 ANSIBLE_REPLICA_CONFIG_PLAYBOOK = """
 ---
-- name: Configure {replica_name} before installation
-  hosts: {replica_name}
+- name: Configure replicas before installation
+  hosts: ipareplicas*
   become: yes
   tasks:
     - lineinfile:
-        path: /etc/hosts
-        line: '{server_ip} server.{domain} server'
-    - lineinfile:
         path: /etc/resolv.conf
         line: nameserver {server_ip}
-    - lineinfile:
-        path: /etc/hosts
-        regexp: '127.*.*.*\\s*replica*'
-        state: absent
-    - lineinfile:
-        path: /etc/hosts
-        line: {replica_ip} {replica_name}.{domain} {replica_name}
-    - package:
-        name: sysstat
+"""
+
+ANSIBLE_REPLICA_INSTALL_PLAYBOOK = """
+---
+- name: Install IPA replicas (tier0)
+  hosts: ipareplicas_tier0
+  become: true
+
+  roles:
+  - role: ipareplica
+    state: present
+
+- name: Install IPA replicas (tier1)
+  hosts: ipareplicas_tier1
+  become: true
+
+  roles:
+  - role: ipareplica
+    state: present
+
+- name: Install IPA replicas (tier2)
+  hosts: ipareplicas_tier2
+  become: true
+
+  roles:
+  - role: ipareplica
+    state: present
+
+- name: Install IPA replicas (tier3)
+  hosts: ipareplicas_tier3
+  become: true
+
+  roles:
+  - role: ipareplica
+    state: present
 """
 
 ANSIBLE_ENABLE_DATA_COLLECTION_PLAYBOOK = """
 ---
 - name: Enable data collection using SAR
-  hosts: ipaserver
+  hosts: ipaserver, ipareplicas*
   tasks:
     - shell:
         cmd: "nohup sar -o ~/saroutput 2 >/dev/null 2>&1 &"

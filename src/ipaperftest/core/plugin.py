@@ -7,10 +7,12 @@ import os
 import uuid
 import time
 import tarfile
+import queue
 import ansible_runner
 from datetime import datetime
 
 from ipaperftest.core.constants import (
+    ANSIBLE_REPLICA_INSTALL_PLAYBOOK,
     ANSIBLE_SERVER_ADD_REPO_PLAYBOOK,
     getLevelName,
     HOSTS_FILE_TEMPLATE,
@@ -140,7 +142,7 @@ class Plugin:
                 "clone",
                 "--depth=1",
                 "--branch",
-                "v0.3.8",
+                "v1.8.4",
                 "https://github.com/freeipa/ansible-freeipa.git",
             ],
             cwd="runner_metadata",
@@ -178,18 +180,71 @@ class Plugin:
         self.provider.generate_metadata(ctx, machine_configs, self.domain)
 
     def generate_ansible_inventory(self, ctx):
-        # Each replica should have main server + all the other replicas
-        # as servers so the topology is built correctly
-        replica_lines = []
-        for name, ip in self.provider.hosts.items():
-            if not name.startswith("replica"):
-                continue
-            servers = ["server." + self.domain]
-            for other_name, other_ip in self.provider.hosts.items():
-                if other_name.startswith("replica") and other_name != name:
-                    servers.append(other_ip)
-            replica_lines.append(ip + " ipareplica_servers={}".format(",".join(servers)))
+        # Each replica should have a maximum of 4 agreements, defined in tiers.
+        # Top node will have 4 childs, while every other node will have 3 children
+        # + 1 parent.
+        def generate_replica_lines():
+            def build_replica_tree(d={}, current_node="server", n_nodes=0, q=queue.Queue()):
+                n_children = 4 if d == {} else 3
+                for _ in range(n_children):
+                    if current_node not in d.keys():
+                        d[current_node] = [f"replica{n_nodes}"]
+                    else:
+                        d[current_node].append(f"replica{n_nodes}")
+                    n_nodes += 1
+                    if n_nodes == ctx.params["replicas"]:
+                        return d
+                for c in d[current_node]:
+                    q.put(c)
+                return build_replica_tree(d, q.get(), n_nodes, q)
 
+            def get_replica_tiers(tree, tiers=[]):
+                if tiers == []:
+                    # first tier is just original server
+                    tiers.append(["server"])
+                    return get_replica_tiers(tree, tiers)
+                else:
+                    # next tier is all children of last added tier
+                    last_tier = tiers[-1]
+                    new_tier = []
+                    for replica in last_tier:
+                        try:
+                            for child in tree[replica]:
+                                new_tier.append(child)
+                        except KeyError:
+                            # this is a leaf node
+                            continue
+                    if new_tier == []:
+                        return tiers
+                    tiers.append(new_tier)
+                    return get_replica_tiers(tree, tiers)
+
+            def get_replica_parent(tree, child):
+                for parent, children in tree.items():
+                    if child in children:
+                        return parent
+
+            tree = build_replica_tree()
+            tiers = get_replica_tiers(tree)
+            replica_lines = []
+            ipareplicas_group_lines = ["\n[ipareplicas:children]"]
+            for i, tier in enumerate(tiers[1:]):
+                ipareplicas_group_lines.append(f"ipareplicas_tier{i}")
+                # Slice tier0 as it's just the original server
+                tier_lines = [
+                    f"[ipareplicas_tier{i}]"
+                ]
+                for replica in tier:
+                    replica_ip = self.provider.hosts[replica]
+                    parent = get_replica_parent(tree, replica)
+                    tier_lines.append(f"{replica_ip} ipareplica_servers={parent}.{self.domain}")
+                replica_lines.extend(tier_lines)
+            replica_lines.extend(ipareplicas_group_lines)
+            return replica_lines
+
+        replica_lines = (generate_replica_lines()
+                         if ctx.params["replicas"] > 0
+                         else ["[ipareplicas]"])
         inventory_str = HOSTS_FILE_TEMPLATE.format(
             server_ip=self.provider.hosts["server"],
             domain=self.domain.lower(),
@@ -197,7 +252,7 @@ class Plugin:
             client_ips="\n".join(
                 [ip for name, ip in self.provider.hosts.items() if name.startswith("client")]
             ),
-            replica_ips="\n".join(replica_lines),
+            replica_lines="\n".join(replica_lines),
             windows_ips="\n".join(
                 [ip for name, ip in self.provider.hosts.items() if name.startswith("windows")]
             ),
@@ -209,7 +264,7 @@ class Plugin:
     def ansible_ping(self, ctx):
         print("Sending ping to VMs...")
         ansible_runner.run(private_data_dir="runner_metadata",
-                           host_pattern="ipaserver,ipaclients,ipareplicas",
+                           host_pattern="ipaserver,ipaclients,ipareplicas*",
                            module="ping")
         if ctx.params["ad_threads"] > 0:
             ansible_runner.run(private_data_dir="runner_metadata",
@@ -223,24 +278,22 @@ class Plugin:
             }
             self.run_ansible_playbook_from_template(ANSIBLE_SERVER_ADD_REPO_PLAYBOOK,
                                                     "add_custom_repo", args, ctx)
+        etc_hosts = ("\n" + " " * 10).join(
+            [f"{ip} {host}.{self.domain}" for host, ip in self.provider.hosts.items()])
         args = {
             "server_ip": self.provider.hosts["server"],
-            "domain": self.domain
+            "domain": self.domain,
+            "etchosts": etc_hosts
         }
         self.run_ansible_playbook_from_template(ANSIBLE_SERVER_CONFIG_PLAYBOOK,
                                                 "server_config", args, ctx)
 
     def configure_replicas(self, ctx):
-        for host, ip in self.provider.hosts.items():
-            if host.startswith("replica"):
-                args = {
-                    "replica_name": host,
-                    "replica_ip": str(ip),
-                    "server_ip": self.provider.hosts["server"],
-                    "domain": self.domain,
-                }
-                self.run_ansible_playbook_from_template(ANSIBLE_REPLICA_CONFIG_PLAYBOOK,
-                                                        host + "_config", args, ctx)
+        args = {
+            "server_ip": self.provider.hosts["server"],
+        }
+        self.run_ansible_playbook_from_template(ANSIBLE_REPLICA_CONFIG_PLAYBOOK,
+                                                "replica_config", args, ctx)
 
     def install_server(self, ctx):
         print("Installing IPA server...")
@@ -251,9 +304,8 @@ class Plugin:
     def install_replicas(self, ctx):
         if ctx.params['replicas'] > 0:
             print("Installing IPA replicas...")
-            ansible_runner.run(private_data_dir="runner_metadata",
-                               playbook="ansible-freeipa/playbooks/install-replica.yml",
-                               verbosity=1)
+            self.run_ansible_playbook_from_template(ANSIBLE_REPLICA_INSTALL_PLAYBOOK,
+                                                    "replica_install", {}, ctx)
 
     def enable_data_collection(self, ctx):
         print("Starting monitoring on server using SAR...")
