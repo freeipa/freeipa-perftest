@@ -123,6 +123,7 @@ class RunTest:
 @click.option("--threads", default=10, help="Threads to run per client during AuthenticationTest.")
 @click.option("--ad-threads", default=0, help="Active Directory login threads "
                                               "to run per client during AuthenticationTest.")
+@click.option("--sizelimit", default=100, help="IPA search size limit")
 @click.option("--disable-selinux", default=False, is_flag=True,
               help="Disable the SSSD SELinux provider in all clients, enable forking in pamtest")
 @click.option("--command", help="Command to execute during APITest.")
@@ -189,6 +190,7 @@ def main(
     amount=1,
     threads=10,
     ad_threads=0,
+    sizelimit=100,
     disable_selinux=False,
     replicas=0,
     results_format="json",

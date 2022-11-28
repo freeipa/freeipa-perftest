@@ -23,6 +23,7 @@ setup(
             'apitest = ipaperftest.plugins.apitest',
             'authenticationtest = ipaperftest.plugins.authenticationtest',
             'enrollmenttest = ipaperftest.plugins.enrollmenttest',
+            'groupsizetest = ipaperftest.plugins.groupsizetest',
         ],
     },
     install_requires=[
