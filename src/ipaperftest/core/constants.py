@@ -178,6 +178,24 @@ ANSIBLE_FETCH_FILES_PLAYBOOK = """
       with_items:
         - "/var/log/ipaserver-install.log"
         - "/var/log/ipaclient-install.log"
+        - "/var/log/httpd"
+        - "/var/log/dirsrv"
+        - "/var/log/krb5kdc.log"
+        - "/var/log/pki/pki-tomcat/ca"
+        - "~/saroutput"
+{custom_logs}
+
+- name: Fetch IPA replica log files
+  hosts: ipareplicas
+  become: yes
+  tasks:
+    - synchronize:
+        src: "{{{{ item }}}}"
+        dest: "{cwd}/sync/{{{{ ansible_hostname }}}}/"
+        mode: pull
+        use_ssh_args: yes
+      with_items:
+>>>>>>> c497105 (Retrieve any custom logs from the server as well)
         - "/var/log/ipareplica-install.log"
         - "/var/log/httpd"
         - "/var/log/dirsrv"
