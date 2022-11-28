@@ -680,10 +680,13 @@ class IPATestDataLDIF(IPADataLDIF):
             )
 
     def gen_users_and_groups(self):
+        members = []
         for host in self.hostname_generator(0, self.hosts):
             for uid in self.username_generator(0, self.users,
                                                hostname=host):
                 self.put_entry(self.gen_user(uid))
+                members.append(uid)
+        self.put_entry(self.gen_group('allusers', members))
 
     def put_entry(self, entry):
         print(file=self.stream)
