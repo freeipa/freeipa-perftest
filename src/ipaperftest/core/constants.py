@@ -195,7 +195,6 @@ ANSIBLE_FETCH_FILES_PLAYBOOK = """
         mode: pull
         use_ssh_args: yes
       with_items:
->>>>>>> c497105 (Retrieve any custom logs from the server as well)
         - "/var/log/ipareplica-install.log"
         - "/var/log/httpd"
         - "/var/log/dirsrv"
@@ -563,4 +562,43 @@ ANSIBLE_AUTHENTICATIONTEST_NOSELINUX_CONFIG_PLAYBOOK = """
       path: /etc/sssd/sssd.conf
       line: selinux_provider = none
       insertafter: id_provider = ipa
+"""
+
+ANSIBLE_GROUPSIZETEST_SERVER_CONFIG_PLAYBOOK = """
+---
+- name: Configure server before execution
+  hosts: ipaserver
+  become: yes
+  tasks:
+    - copy:
+        dest: /etc/ipa/server.conf
+        content: |
+          [global]
+          debug=True
+    - service:
+        name: httpd
+        state: restarted
+    - synchronize:
+        src: "{{{{ item }}}}"
+        dest: "/root"
+        mode: push
+        use_ssh_args: yes
+      with_items:
+        - create-test-data.py
+    - package:
+        name:
+          - python3-pip
+          - time
+    - command:
+        cmd: "pip3 install click"
+    - command:
+        cmd: "python3 create-test-data.py --hosts 1 --outfile userdata.ldif --users-per-host {threads}"
+        chdir: /root
+    - ipaconfig:
+        ipaadmin_password: password
+        enable_migration: yes
+        searchrecordslimit: {sizelimit}
+    - command:
+        cmd: "ldapadd -x -D 'cn=Directory Manager' -w password -f userdata.ldif"
+        chdir: /root
 """

@@ -177,7 +177,8 @@ class Plugin:
             )
 
         for c in self.generate_clients(ctx):
-            machine_configs.append(c)
+            if c:
+                machine_configs.append(c)
 
         self.provider.generate_metadata(ctx, machine_configs, self.domain)
 
