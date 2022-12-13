@@ -163,7 +163,7 @@ class RunTest:
 )
 @click.option(
     "--auth-spread",
-    help="Time range in seconds to spread auths in AuthenticationTest",
+    help="Time range in minutes to spread auths in AuthenticationTest",
     default=0,
 )
 @click.pass_context
