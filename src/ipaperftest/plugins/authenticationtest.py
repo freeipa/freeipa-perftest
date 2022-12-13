@@ -202,7 +202,7 @@ class AuthenticationTest(Plugin):
             # spread the pamtest execution
             spread = 0
             if ctx.params["auth_spread"] > 0:
-                spread = random.randrange(0, int(ctx.params['auth_spread']))
+                spread = random.randrange(0, int(ctx.params['auth_spread'])) * 60
             cmds = [
                 "sleep $(( {} - $(date +%s) ))".format(str(client_auth_time + spread)),
                 "sudo pamtest {} --threads {} --ad-threads {} -o pamtest.log".format(
