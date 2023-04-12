@@ -60,6 +60,7 @@ phases:
 - name: prep
   steps:
   - playbook: prep/redhat-base.yaml
+  - playbook: prep/repos.yaml
 - name: teardown
   steps:
   - playbook: teardown/mrack-destroy.yaml
