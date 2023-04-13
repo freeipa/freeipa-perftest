@@ -263,9 +263,8 @@ class AuthenticationTest(Plugin):
                          error="None of the threads returned results.")
         total_percentage = round((total_successes / total_threads) * 100)
 
-        print("{} threads out of {} succeeded ({}%)".format(
-            total_successes, total_threads, total_percentage)
-        )
+        yield Result(self, SUCCESS, msg="{} threads out of {} succeeded ({}%)".format(
+            total_successes, total_threads, total_percentage), successes=total_successes)
 
         if total_percentage == 100:
             yield Result(self, SUCCESS, msg="All threads succeded.")

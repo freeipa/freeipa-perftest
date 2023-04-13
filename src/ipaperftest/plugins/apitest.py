@@ -170,11 +170,12 @@ class APITest(Plugin):
             f.write(returncodes)
 
         if commands_succeeded == ctx.params['amount']:
-            yield Result(self, SUCCESS, msg="All commands executed successfully.")
+            yield Result(self, SUCCESS, msg="All commands executed successfully.",
+                         successes=commands_succeeded)
         else:
             yield Result(self, ERROR,
-                         error="Not all commands completed succesfully (%s/%s). "
-                         "Check logs." % (commands_succeeded, ctx.params['amount']))
+                         error="Not all commands completed succesfully (%s/%s). Check logs." %
+                         (commands_succeeded, ctx.params['amount']), successes=commands_succeeded)
 
         yield Result(self, SUCCESS, msg="Test executed in {} seconds.".format(self.execution_time))
 

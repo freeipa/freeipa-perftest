@@ -92,12 +92,14 @@ class EnrollmentTest(Plugin):
                 int(host_find_output) == self.clients_succeeded + non_client_hosts
                 and len(self.provider.hosts.keys()) == self.clients_succeeded + non_client_hosts
             ):
-                yield Result(self, SUCCESS, msg="All clients enrolled succesfully.")
+                yield Result(self, SUCCESS, msg="All clients enrolled succesfully.",
+                             successes=self.clients_succeeded)
             else:
                 yield Result(self, ERROR,
                              error="Client installs succeeded number (%s) "
                              "does not match host-find output (%s)."
-                             % (self.clients_succeeded, host_find_output))
+                             % (self.clients_succeeded, host_find_output),
+                             successes=self.clients_succeeded)
         except ValueError:
             yield Result(self, ERROR,
                          error="Failed to convert host-find output to int. Value was: %s"
