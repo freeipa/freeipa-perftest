@@ -562,6 +562,10 @@ ANSIBLE_AUTHENTICATIONTEST_NOSELINUX_CONFIG_PLAYBOOK = """
       path: /etc/sssd/sssd.conf
       line: selinux_provider = none
       insertafter: id_provider = ipa
+  - name: "Restart SSSD"
+    service:
+      name: sssd
+      state: restarted
 """
 
 ANSIBLE_GROUPSIZETEST_SERVER_CONFIG_PLAYBOOK = """
