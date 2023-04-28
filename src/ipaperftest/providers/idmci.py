@@ -61,8 +61,8 @@ class IdMCIProvider(Provider):
 
         server_img = ctx.params["server_image"]
         client_img = ctx.params["client_image"]
-        self.server_image = server_img if server_img else "fedora-34"
-        self.client_image = client_img if client_img else "fedora-34"
+        self.server_image = server_img if server_img else "fedora-38"
+        self.client_image = client_img if client_img else "fedora-38"
 
         images = {
             "server": self.server_image,
