@@ -12,6 +12,8 @@ import ansible_runner
 from datetime import datetime
 
 from ipaperftest.core.constants import (
+    SUCCESS,
+    ERROR,
     ANSIBLE_REPLICA_INSTALL_PLAYBOOK,
     ANSIBLE_SERVER_ADD_REPO_PLAYBOOK,
     getLevelName,
@@ -338,6 +340,27 @@ class Plugin:
         """Analyze log files for failures, patterns, etc"""
         pass
 
+    def check_results(self, ctx):
+        """ Compare results to expected results """
+        expected_result_type = ctx.params["expected_result_type"]
+        if expected_result_type == "no_errors":
+            return
+
+        expected_result = ctx.params["expected_result"]
+        if expected_result_type == "time":
+            result = self.execution_time
+        elif expected_result_type == "time_unit":
+            result = self.execution_time / ctx.params["amount"]
+
+        if result > expected_result:
+            yield Result(self, ERROR,
+                         error="The test took longer than expected. Expected (%s): %s, got: %s"
+                         % (expected_result_type, expected_result, result))
+        else:
+            yield Result(self, SUCCESS,
+                         msg="The test completed in the expected (%s) time (%s)."
+                         % (expected_result_type, result))
+
     def archive_results(self, ctx):
         """ Create tar with logs and metadata"""
         with tarfile.open(self.results_archive_name + ".tar.gz", "w:gz") as tar:
@@ -379,6 +402,7 @@ class Plugin:
             self.run,
             self.collect_logs,
             self.post_process_logs,
+            self.check_results,
             self.archive_results,
         ]
 

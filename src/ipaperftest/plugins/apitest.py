@@ -94,8 +94,7 @@ class APITest(Plugin):
             if all([cmds == "1" for cmds in clients_cmds_pending]):
                 break
             time.sleep(5)
-        end_time = time.time()
-        self.execution_time = end_time - start_time
+        self.execution_time = time.time() - start_time
 
     def run_sequentially(self, ctx):
         commands = []
