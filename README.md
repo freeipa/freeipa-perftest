@@ -30,34 +30,42 @@ For using the Vagrant provider, these need to be installed as well:
 Usage: ipaperftest [OPTIONS]
 
 Options:
-  --test TEXT                    Test to execute.  [default: EnrollmentTest]
-  --client-image TEXT            Image to use for clients.
-  --server-image TEXT            Image to use for server.
-  --amount INTEGER               Size of the test.  [default: 1]
-  --replicas INTEGER RANGE       Number of replicas to create.  [default: 0;
-                                 0<=x<=2]
-  --threads INTEGER              Threads to run per client during
-                                 AuthenticationTest.  [default: 10]
-  --ad-threads INTEGER           Active Directory login threads to run per
-                                 client during AuthenticationTest.  [default:
-                                 0]
-  --command TEXT                 Command to execute during APITest.
-  --results-format [json|human]  Format to use for results output  [default:
-                                 json]
-  --results-output-file TEXT     File to write results output to
-  --custom-repo-url TEXT         URL from custom repo to be configured on the
-                                 server hosts. Make sure N-V-R is higher than
-                                 the packages available in the server image so
-                                 that your packages are used.
-  --provider [vagrant|idmci]     Provider to use during test execution
-                                 [default: idmci]
-  --private-key TEXT             Private key needed to access VMs in case the
-                                 default is not enough.
-  --sequential                   Run APITest commands sequentially from a
-                                 single client.
-  --idmci-lifetime INTEGER       Lifetime in hours of IdM-CI hosts.  [default:
-                                 8]
-  --help                         Show this message and exit.
+  --test TEXT                     Test to execute.  [default: EnrollmentTest]
+  --client-image TEXT             Image to use for clients.
+  --server-image TEXT             Image to use for server.
+  --amount INTEGER                Size of the test.  [default: 1]
+  --replicas INTEGER RANGE        Number of replicas to create.  [default: 0;
+                                  0<=x<=64]
+  --threads INTEGER               Threads to run per client during
+                                  AuthenticationTest.  [default: 10]
+  --ad-threads INTEGER            Active Directory login threads to run per
+                                  client during AuthenticationTest.  [default:
+                                  0]
+  --disable-selinux               Disable the SSSD SELinux provider in all
+                                  clients, enable forking in pamtest
+  --command TEXT                  Command to execute during APITest.
+  --results-format [json|human]   Format to use for results output  [default:
+                                  json]
+  --results-output-file TEXT      File to write results output to
+  --custom-repo-url TEXT          URL from custom repo to be configured on the
+                                  server hosts. Make sure N-V-R is higher than
+                                  the packages available in the server image
+                                  so that your packages are used.
+  --provider [vagrant|idmci]      Provider to use during test execution
+                                  [default: idmci]
+  --private-key TEXT              Private key needed to access VMs in case the
+                                  default is not enough.
+  --sequential                    Run APITest commands sequentially from a
+                                  single client.
+  --idmci-lifetime INTEGER        Lifetime in hours of IdM-CI hosts.
+                                  [default: 8]
+  --auth-spread INTEGER           Time range in minutes to spread auths in
+                                  AuthenticationTest  [default: 0]
+  --expected-result-type [time|time_unit|no_errors]
+                                  Type of expected result.  [default:
+                                  no_errors]
+  --expected-result INTEGER       Expected result of the test, in seconds.
+  --help                          Show this message and exit.
 ```
 
 ## Capturing results
@@ -66,6 +74,16 @@ After executing the script, a `sync` directory will be created. There you will f
 deployed, including performance monitoring using SAR.
 
 A tarball will be created containing the sync directory and metadata like Ansible playbooks and Vagrantfile.
+
+## Expecting results
+
+A result can be passed to the tool so that it fails if the actual
+result is longer than expected. The currently supported types of expected
+results are:
+
+* `time`: total time of execution of the test, excluding setup.
+* `time_unit`: time of execution per each item (defined by `amount`), excluding setup.
+* `no_errors`: the test will succeed as long as no errors are raised.
 
 ## Development
 

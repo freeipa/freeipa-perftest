@@ -166,6 +166,16 @@ class RunTest:
     help="Time range in minutes to spread auths in AuthenticationTest",
     default=0,
 )
+@click.option(
+    "--expected-result-type",
+    help="Type of expected result.",
+    type=click.Choice(["time", "time_unit", "no_errors"]), default="no_errors"
+)
+@click.option(
+    "--expected-result",
+    help="Expected result of the test, in seconds.",
+    type=click.INT
+)
 @click.pass_context
 def main(
     ctx,
@@ -175,6 +185,7 @@ def main(
     client_image,
     server_image,
     sequential,
+    expected_result,
     amount=1,
     threads=10,
     ad_threads=0,
@@ -186,6 +197,7 @@ def main(
     provider="idmci",
     idmci_lifetime=8,
     auth_spread=0,
+    expected_result_type="no_errors",
 ):
 
     tests = RunTest(['ipaperftest.registry'])

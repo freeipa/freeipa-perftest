@@ -44,9 +44,8 @@ class EnrollmentTest(Plugin):
                                                 "enrollmenttest_client_config", args, ctx)
 
         # Client installations will be triggered at now + 1min per 20 clients
-        client_install_time = (
-            int(time.time()) + max(int(len(self.provider.hosts.keys()) / 20), 1) * 60
-        )
+        wait_time = max(int(len(self.provider.hosts.keys()) / 20), 1) * 60
+        client_install_time = int(time.time()) + wait_time
 
         client_cmds = [
             ("sleep $(( {} - $(date +%s) )) "
@@ -66,6 +65,8 @@ class EnrollmentTest(Plugin):
             % time.ctime(client_install_time)
         )
         print("Waiting for client installs to be completed...")
+
+        start_time = time.time()
         self.clients_succeeded = 0
         clients_returncodes = ""
         for host, proc in processes.items():
@@ -75,6 +76,7 @@ class EnrollmentTest(Plugin):
             clients_returncodes += rc_str + "\n"
             if returncode == 0:
                 self.clients_succeeded += 1
+        self.execution_time = time.time() - start_time - wait_time
         print("Clients succeeded: %s" % str(self.clients_succeeded))
         print("Return codes written to sync directory.")
         with open("sync/returncodes", "w") as f:

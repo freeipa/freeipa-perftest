@@ -188,9 +188,8 @@ class AuthenticationTest(Plugin):
             )
 
         # Client authentications will be triggered at now + 1min per 20 clients
-        client_auth_time = (
-            int(time.time()) + max(int(len(self.provider.hosts.keys()) / 20), 1) * 60
-        )
+        wait_time = max(int(len(self.provider.hosts.keys()) / 20), 1) * 60
+        client_auth_time = int(time.time()) + wait_time
 
         # Now that all the client installs are done, fire off the
         # authentications (for now whether all installs are ok or not)
@@ -215,8 +214,11 @@ class AuthenticationTest(Plugin):
             processes[host] = proc
 
         print("Waiting for client auth to be completed...")
+
+        start_time = time.time()
         for host, proc in processes.items():
             proc.communicate()
+        self.execution_time = time.time() - start_time - wait_time
 
         return
 
