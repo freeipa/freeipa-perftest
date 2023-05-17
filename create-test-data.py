@@ -17,6 +17,7 @@ class IPAData(object):
             users=50000,
             hosts=40000,
             host_prefix="client",
+            number_of_subgroups=0,
             outfile=None,
     ):
 
@@ -83,6 +84,8 @@ class IPAData(object):
 
         self.hosts = hosts
         self.hostgroups = hostgroups
+
+        self.number_of_subgroups = number_of_subgroups
 
         self.hostgroups_per_host = hostgroups_per_host
         self.nested_hostgroups_max_level = nested_hostgroups_max_level
@@ -681,12 +684,32 @@ class IPATestDataLDIF(IPADataLDIF):
 
     def gen_users_and_groups(self):
         members = []
+        group_members = []
+        groupnum = 0
+        users_per_subgroup = 0
+        if self.number_of_subgroups > 0:
+            users_per_subgroup = (self.hosts * self.users) // self.number_of_subgroups
         for host in self.hostname_generator(0, self.hosts):
             for uid in self.username_generator(0, self.users,
                                                hostname=host):
                 self.put_entry(self.gen_user(uid))
                 members.append(uid)
-        self.put_entry(self.gen_group('allusers', members))
+                if (
+                    self.number_of_subgroups
+                    and len(members) == users_per_subgroup
+                ):
+                    group_name = "group{}".format(groupnum)
+                    groupnum += 1
+                    self.put_entry(self.gen_group(group_name, members))
+                    members = []
+                    group_members.append(group_name)
+        if self.number_of_subgroups > 0:
+            if len(members):
+                group_name = "group{}".format(groupnum)
+                self.put_entry(self.gen_group(group_name, members))
+            self.put_entry(self.gen_group("allusers", group_members=group_members))
+        else:
+            self.put_entry(self.gen_group('allusers', members))
 
     def put_entry(self, entry):
         print(file=self.stream)
@@ -716,6 +739,7 @@ class IPATestDataLDIF(IPADataLDIF):
 @click.option("--with-hbac", default=False, help="Create hbac rules.",
               is_flag=True)
 @click.option("--debug", default=False, help="Debug logging", is_flag=True)
+@click.option("--number-of-subgroups", default=0, help="Number of subgroups to create.")
 def main(
     users_per_host,
     hosts,
@@ -726,6 +750,7 @@ def main(
     with_hbac,
     debug,
     outfile,
+    number_of_subgroups,
 ):
     api.bootstrap(in_server=True, context='server', in_tree=False, debug=debug)
     api.finalize()
@@ -736,6 +761,7 @@ def main(
         users=users_per_host,
         hosts=hosts,
         host_prefix=host_prefix,
+        number_of_subgroups=number_of_subgroups,
         outfile=outfile,
     )
     data.do_magic()

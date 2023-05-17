@@ -65,6 +65,8 @@ Options:
                                   Type of expected result.  [default:
                                   no_errors]
   --expected-result INTEGER       Expected result of the test, in seconds.
+ --number-of-subgroups INTEGER   Number of sub groups for Groupsize test
+                                  [default: 0]
   --help                          Show this message and exit.
 ```
 
@@ -160,6 +162,32 @@ There is an option to run the test in sequential mode. When this mode is activat
 and commands will be executed sequentially from this single client.
 
 After the execution of the test, output from the commands will be written to the `sync` directory.
+
+### GroupSizeTest
+
+Determine how long it takes to add one more user to a group. As groups grow in size the LDAP
+memberof and indexing calculations becomes more intense. This test creates a selected number
+of users as an LDIF, as members of a new group (allusers). It then calls ipa group-add-member to add
+one more user and returns the wall-clock time to do so. In IPA generally we try to keep
+times under 2s.
+
+There is also the capability to create subgroups. Long ago subgroups was proposed as a
+workaround to a single group with a large number of members. The number of subgroups
+is specified iwth --number-of-subgroups. These are all members of a new top-level group
+and users are more or less equally assigned to the subgroups. Then one more member is
+added to a subgroup and the time returned.
+
+#### Options
+Rather than declaring a bunch of new options some are reused. The available options
+are:
+
+- threads: number of users to create
+- number-of-subgroups: number of subgroups to create (if not specified there is a single group)
+
+Sample execution:
+
+ipaperftest --test GroupSizeTest --threads 1500
+ipaperftest --test GroupSizeTest --threads 1500 --number-of-subgroups 3 
 
 ## Creating test users
 

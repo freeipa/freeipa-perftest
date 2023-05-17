@@ -592,7 +592,7 @@ ANSIBLE_GROUPSIZETEST_SERVER_CONFIG_PLAYBOOK = """
     - command:
         cmd: "pip3 install click"
     - command:
-        cmd: "python3 create-test-data.py --hosts 1 --outfile userdata.ldif --users-per-host {threads}"
+        cmd: "python3 create-test-data.py --hosts 1 --outfile userdata.ldif --users-per-host {threads} --number-of-subgroups {number_of_subgroups}"
         chdir: /root
     - ipaconfig:
         ipaadmin_password: password

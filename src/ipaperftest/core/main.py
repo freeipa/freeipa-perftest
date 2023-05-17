@@ -177,6 +177,11 @@ class RunTest:
     help="Expected result of the test, in seconds.",
     type=click.INT
 )
+@click.option(
+    "--number-of-subgroups",
+    help="Number of sub groups for Groupsize test",
+    default=0,
+)
 @click.pass_context
 def main(
     ctx,
@@ -200,6 +205,7 @@ def main(
     idmci_lifetime=8,
     auth_spread=0,
     expected_result_type="no_errors",
+    number_of_subgroups=0,
 ):
 
     tests = RunTest(['ipaperftest.registry'])
