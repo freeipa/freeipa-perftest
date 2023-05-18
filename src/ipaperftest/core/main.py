@@ -174,7 +174,7 @@ class RunTest:
 @click.option(
     "--expected-result",
     help="Expected result of the test, in seconds.",
-    type=click.INT
+    type=click.FLOAT
 )
 @click.pass_context
 def main(
