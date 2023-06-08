@@ -46,9 +46,9 @@ class GroupSizeTest(Plugin):
                              self.provider.hosts["server"], ctx)
 
         if ctx.params.get("number_of_subgroups", 0) > 0:
-            command = "ipa group-add-member --users tuser1 group0 --no-members"
+            command = "ipa group-add-member --users tuser1 group0"
         else:
-            command = "ipa group-add-member --users tuser1 allusers --no-members"
+            command = "ipa group-add-member --users tuser1 allusers"
         cmd = (
             r"echo {cmd} > ~/group_add_member.log;"
             r"/usr/bin/time -p {cmd} >> ~/group_add_member.log 2>&1;"
@@ -72,15 +72,16 @@ class GroupSizeTest(Plugin):
                 break
 
         if ctx.params["number_of_subgroups"]:
-            self.results_archive_name = "GroupSizeTest-" \
-                    "{}-{}-{}threads-{}sizelimit-{}subgroups-{}real".format
-            (
-                datetime.now().strftime("%FT%H%MZ"),
-                self.provider.server_image.replace("/", ""),
-                ctx.params["threads"],
-                ctx.params["sizelimit"],
-                ctx.params["number_of_subgroups"],
-                addtime
+            self.results_archive_name = (
+                "GroupSizeTest-"
+                "{}-{}-{}threads-{}sizelimit-{}subgroups-{}real".format(
+                    datetime.now().strftime("%FT%H%MZ"),
+                    self.provider.server_image.replace("/", ""),
+                    ctx.params["threads"],
+                    ctx.params["sizelimit"],
+                    ctx.params["number_of_subgroups"],
+                    addtime
+                )
             )
         else:
             self.results_archive_name = "GroupSizeTest-{}-{}-{}threads-{}sizelimit-{}real".format(
