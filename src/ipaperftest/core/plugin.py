@@ -245,6 +245,8 @@ class Plugin:
             replica_lines.extend(ipareplicas_group_lines)
             return replica_lines
 
+        if len(self.provider.hosts) == 0:
+            raise RuntimeError('No hosts were provisioned')
         replica_lines = (generate_replica_lines()
                          if ctx.params["replicas"] > 0
                          else ["[ipareplicas]"])
