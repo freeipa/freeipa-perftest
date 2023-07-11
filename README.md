@@ -30,7 +30,8 @@ For using the Vagrant provider, these need to be installed as well:
 Usage: ipaperftest [OPTIONS]
 
 Options:
-  --test TEXT                     Test to execute.  [default: EnrollmentTest]
+  --test [EnrollmentTest|APITest|AuthenticationTest|GroupSizeTest]
+                                  Test to execute.  [default: EnrollmentTest]
   --client-image TEXT             Image to use for clients.
   --server-image TEXT             Image to use for server.
   --amount INTEGER                Size of the test.  [default: 1]
@@ -41,6 +42,7 @@ Options:
   --ad-threads INTEGER            Active Directory login threads to run per
                                   client during AuthenticationTest.  [default:
                                   0]
+  --sizelimit INTEGER             IPA search size limit  [default: 100]
   --disable-selinux               Disable the SSSD SELinux provider in all
                                   clients, enable forking in pamtest
   --command TEXT                  Command to execute during APITest.
@@ -64,8 +66,8 @@ Options:
   --expected-result-type [time|time_unit|no_errors]
                                   Type of expected result.  [default:
                                   no_errors]
-  --expected-result INTEGER       Expected result of the test, in seconds.
- --number-of-subgroups INTEGER   Number of sub groups for Groupsize test
+  --expected-result FLOAT         Expected result of the test, in seconds.
+  --number-of-subgroups INTEGER   Number of sub groups for Groupsize test
                                   [default: 0]
   --help                          Show this message and exit.
 ```
@@ -181,13 +183,15 @@ added to a subgroup and the time returned.
 Rather than declaring a bunch of new options some are reused. The available options
 are:
 
-- threads: number of users to create
-- number-of-subgroups: number of subgroups to create (if not specified there is a single group)
+- `threads`: number of users to create
+- `number-of-subgroups`: number of subgroups to create (if not specified there is a single group)
 
 Sample execution:
 
+```
 ipaperftest --test GroupSizeTest --threads 1500
 ipaperftest --test GroupSizeTest --threads 1500 --number-of-subgroups 3 
+```
 
 ## Creating test users
 

@@ -404,7 +404,6 @@ class Plugin:
             self.collect_logs,
             self.post_process_logs,
             self.check_results,
-            self.archive_results,
         ]
 
         for func in funcs:
