@@ -68,17 +68,12 @@ class RunTest:
         self.results = Results()
 
     def run(self, ctx):
-        plugins = []
-
         for name, registry in find_registries(self.entry_points).items():
             registry.initialize()
             for plugin in find_plugins(name, registry):
-                plugins.append(plugin)
-
-        # TODO: short-circuit this and run directly above. Easier to
-        #       troubleshoot here
-        for plugin in plugins:
-            if plugin.__class__.__name__ == ctx.params['test']:
+                if plugin.__class__.__name__ != ctx.params['test']:
+                    continue
+                selected_plugin = plugin
                 try:
                     for result in plugin.execute(ctx):
                         self.results.add(result)
@@ -92,7 +87,12 @@ class RunTest:
                 output = out(ctx.params['results_output_file'])
                 break
 
+        # Output first to results_output_file / stdout, and then to runner_metadata
+        # After that, build the tarfile will all the logs
         output.render(self.results)
+        output.filename = "runner_metadata/test_result"
+        output.render(self.results)
+        selected_plugin.archive_results(ctx)
 
         ret_val = 0
         for result in self.results.results:
@@ -104,7 +104,11 @@ class RunTest:
 
 
 @click.command("cli", context_settings={"show_default": True})
-@click.option("--test", default="EnrollmentTest", help="Test to execute.")
+@click.option("--test", default="EnrollmentTest", help="Test to execute.",
+              type=click.Choice(["EnrollmentTest",
+                                 "APITest",
+                                 "AuthenticationTest",
+                                 "GroupSizeTest"]))
 @click.option(
     "--client-image",
     help="Image to use for clients.",
