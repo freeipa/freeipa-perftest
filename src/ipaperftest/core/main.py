@@ -75,6 +75,7 @@ class RunTest:
                     continue
                 selected_plugin = plugin
                 try:
+                    self.results.add(Result(plugin, SUCCESS, args=sys.argv))
                     for result in plugin.execute(ctx):
                         self.results.add(result)
                 except Exception:
