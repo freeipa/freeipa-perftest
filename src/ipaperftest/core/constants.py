@@ -156,6 +156,7 @@ ANSIBLE_CFG_TEMPLATE = """
 remote_user = root
 host_key_checking = False
 deprecation_warnings = False
+private_key_file = {private_key_path}
 roles_path   = {cwd}/ansible-freeipa/roles
 library      = {cwd}/ansible-freeipa/plugins/modules
 module_utils = {cwd}/ansible-freeipa/plugins/module_utils
