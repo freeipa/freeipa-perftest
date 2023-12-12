@@ -153,7 +153,7 @@ class Plugin:
         with open("runner_metadata/ansible.cfg", "w") as f:
             f.write(ANSIBLE_CFG_TEMPLATE.format(
                 cwd=os.path.join(os.getcwd(), "runner_metadata"),
-                private_key_path=ctx.params["private_key"],
+                private_key_path=ctx.params["private_key"] or self.provider.default_private_key,
                 default_private_key_path=self.provider.default_private_key
                 )
             )
