@@ -193,6 +193,31 @@ ipaperftest --test GroupSizeTest --threads 1500
 ipaperftest --test GroupSizeTest --threads 1500 --number-of-subgroups 3 
 ```
 
+### CertIssuanceTest
+
+Find the limit of the IPA API to issue new certificates.
+
+A set number of clients is enrolled then services for each client are created.
+
+For each service an ipa-getcert request is issued. There is little effort made
+to ensure that these are all run at the same time but in the end this more
+closely mirrors a live installation.
+
+#### Options
+Rather than declaring a bunch of new options some are reused. The available options
+are:
+
+- `cert-requests`: number of certificates to request for each client
+- `clients`: number of clients to enroll
+- `wsgi-processes`: number of WSGI processes to enable (default=4)
+
+Sample execution:
+
+```
+ipaperftest --test CertIssuanceTest --amount 70  --cert-requests 5
+ipaperftest --test CertIssuanceTest --amount 70  --cert-requests 5 --wsgi-processes 8
+```
+
 ## Creating test users
 
 For client authentication test we need a lot of users to test against.

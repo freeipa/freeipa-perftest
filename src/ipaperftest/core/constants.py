@@ -607,3 +607,45 @@ ANSIBLE_GROUPSIZETEST_SERVER_CONFIG_PLAYBOOK = """
         cmd: "ldapadd -x -D 'cn=Directory Manager' -w password -f userdata.ldif"
         chdir: /root
 """
+
+ANSIBLE_CERTISSUANCETEST_SERVER_CONFIG_PLAYBOOK = """
+---
+- name: Add services after enrollment
+  hosts: ipaserver
+  become: yes
+  tasks:
+    - synchronize:
+        src: "{{{{ item }}}}"
+        dest: "/root"
+        mode: push
+        use_ssh_args: yes
+      with_items:
+        - create-test-data.py
+    - package:
+        name: python3-pip
+    - command:
+        cmd: "pip3 install click"
+    - command:
+        cmd: "python3 create-test-data.py --hosts {amount} --outfile userdata.ldif --users-per-host 0 --services {services}"
+        chdir: /root
+    - command:
+        cmd: "ldapadd -x -D 'cn=Directory Manager' -w password -f userdata.ldif"
+        chdir: /root
+"""
+
+ANSIBLE_CERTISSUANCETEST_SERVER_TUNING_PLAYBOOK = """
+---
+- name: Tune the server WSGI parameters
+  hosts: ipaserver
+  become: yes
+  tasks:
+    - name: "Tune WSGI"
+      lineinfile:
+        path: /etc/httpd/conf.d/ipa.conf
+        regexp: '^WSGIDaemonProcess'
+        line: WSGIDaemonProcess ipa processes={wsgi_processes} threads=1 maximum-requests=500 \\
+    - name: "Restart httpd"
+      service:
+        name: httpd
+        state: restarted
+"""
