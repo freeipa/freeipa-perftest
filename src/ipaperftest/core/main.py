@@ -109,6 +109,7 @@ class RunTest:
               type=click.Choice(["EnrollmentTest",
                                  "APITest",
                                  "AuthenticationTest",
+                                 "CertIssuanceTest",
                                  "GroupSizeTest"]))
 @click.option(
     "--client-image",
@@ -187,6 +188,8 @@ class RunTest:
     help="Number of sub groups for Groupsize test",
     default=0,
 )
+@click.option("--cert-requests", default=0, help="Number of certificates to request")
+@click.option("--wsgi-processes", default=4, help="Number of WSGI processes")
 @click.pass_context
 def main(
     ctx,
@@ -211,6 +214,8 @@ def main(
     auth_spread=0,
     expected_result_type="no_errors",
     number_of_subgroups=0,
+    cert_requests=0,
+    wsgi_processes=4,
 ):
 
     tests = RunTest(['ipaperftest.registry'])

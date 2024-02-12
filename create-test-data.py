@@ -17,6 +17,7 @@ class IPAData(object):
             users=50000,
             hosts=40000,
             host_prefix="client",
+            services=0,
             number_of_subgroups=0,
             outfile=None,
     ):
@@ -84,6 +85,8 @@ class IPAData(object):
 
         self.hosts = hosts
         self.hostgroups = hostgroups
+
+        self.services = services
 
         self.number_of_subgroups = number_of_subgroups
 
@@ -202,6 +205,20 @@ class IPAData(object):
                 'groupOfNames',
                 'top',
                 'mepOriginEntry',
+            ],
+            'ipaUniqueID': ['autogenerate'],
+        }
+
+        self.service_defaults = {
+            'objectClass': [
+                'ipakrbprincipal',
+                'ipaobject',
+                'ipaservice',
+                'krbprincipal',
+                'krbprincipalaux',
+                'krbticketpolicyaux',
+                'pkiuser',
+                'top',
             ],
             'ipaUniqueID': ['autogenerate'],
         }
@@ -329,6 +346,37 @@ class IPAData(object):
     def hostgroupname_generator(self, start, stop, step=1):
         for i in range(start, stop, step):
             yield 'hostgroup{}'.format(i)
+
+    def gen_service(self, servicename, hostname):
+        service = dict(self.service_defaults)
+        service['dn'] = 'krbprincipalname={servicename}/{hostname}@{realm},' \
+            'cn=services,cn=accounts,{suffix}'.format(
+            servicename=servicename,
+            hostname=hostname,
+            realm=self.realm,
+            suffix=self.basedn
+        )
+        service['krbPrincipalName'] = ['{servicename}/{hostname}@{realm}'.format(
+            servicename=servicename,
+            hostname=hostname,
+            realm=self.realm
+        )]
+        service['krbCanonicalName'] = service['krbPrincipalName']
+        service['ipaKrbPrincipalAlias'] = service['krbPrincipalName']
+        service['managedBy'] = [
+            'fqdn={hostname},cn=computers,cn=accounts,{suffix}'.format(
+                hostname=hostname,
+                suffix=self.basedn)]
+        return service
+
+    def generate_services(self):
+        for i in range(0, self.hosts, 1):
+            hostname = '{}{:03d}.{}'.format(
+                self.host_prefix, i, self.domain
+            )
+            for j in range(0, self.services, 1):
+                service = self.gen_service(f'service{j}', hostname)
+                self.put_entry(service)
 
     def gen_sudorule(
             self, name,
@@ -671,6 +719,7 @@ class IPADataLDIF(IPAData):
 class IPATestDataLDIF(IPADataLDIF):
     def do_magic(self):
         self.gen_users_and_groups()
+        self.generate_services()
 
     def username_generator(self, start, stop, step=1, hostname=None):
         for i in range(start, stop, step):
@@ -729,6 +778,8 @@ class IPATestDataLDIF(IPADataLDIF):
 @click.option("--hosts", default=500, help="Number of hosts to create.",
               type=int)
 @click.option("--host-prefix", default="client", help="hostname prefix")
+@click.option("--services", default=0, help="Number of services per host to create.",
+              type=int)
 @click.option("--outfile", default=None, help="LDIF output file")
 @click.option("--with-groups", default=False, help="Create user groups.",
               is_flag=True)
@@ -744,6 +795,7 @@ def main(
     users_per_host,
     hosts,
     host_prefix,
+    services,
     with_groups,
     with_hostgroups,
     with_sudo,
@@ -761,6 +813,7 @@ def main(
         users=users_per_host,
         hosts=hosts,
         host_prefix=host_prefix,
+        services=services,
         number_of_subgroups=number_of_subgroups,
         outfile=outfile,
     )

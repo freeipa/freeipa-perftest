@@ -22,6 +22,7 @@ setup(
         'ipaperftest.plugins': [
             'apitest = ipaperftest.plugins.apitest',
             'authenticationtest = ipaperftest.plugins.authenticationtest',
+            'certissuetest = ipaperftest.plugins.certissuetest',
             'enrollmenttest = ipaperftest.plugins.enrollmenttest',
             'groupsizetest = ipaperftest.plugins.groupsizetest',
         ],
