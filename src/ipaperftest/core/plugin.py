@@ -144,7 +144,7 @@ class Plugin:
                 "clone",
                 "--depth=1",
                 "--branch",
-                "v1.8.4",
+                "v1.13.2",
                 "https://github.com/freeipa/ansible-freeipa.git",
             ],
             cwd="runner_metadata",
