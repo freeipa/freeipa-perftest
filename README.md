@@ -98,6 +98,7 @@ To create the virtual environment run:
 ```
 $ python3 -m venv --system-site-packages venv
 $ venv/bin/pip install -e .
+$ venv/bin/pip install -r requirements.txt
 ```
 
 To use the environment:
